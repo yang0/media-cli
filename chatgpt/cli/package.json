@@ -1,0 +1,24 @@
+{
+  "name": "chatgpt-img",
+  "version": "0.1.0",
+  "description": "Generate images via chatgpt.com using an existing Chrome CDP session.",
+  "type": "module",
+  "bin": {
+    "chatgpt-img": "./src/cli.mjs"
+  },
+  "scripts": {
+    "start": "node src/cli.mjs",
+    "check": "node --check src/cli.mjs && node --check src/cdp.mjs && node --check src/chatgpt-image.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "chatgpt",
+    "image-generation",
+    "cdp",
+    "cli"
+  ],
+  "license": "ISC",
+  "dependencies": {}
+}

@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.Python
+
+# Build
+dist/
+build/
+*.tgz
+*.egg-info/
+
+# Runtime / generated
+downloads/
+**/downloads/
+outputs/
+**/outputs/
+debug/
+**/debug/
+profiles/
+**/profiles/
+logs/
+*.log
+
+# Session / local state (do not commit)
+*.session.json
+.dola-cli-session*.json
+.doubao-img*.json
+.higgsfield-state.json
+account-pool*.json
+bridge_*.json
+flow_*.json
+
+# Secrets & browser data
+*cookies*.txt
+*_cookies.txt
+.env
+.env.*
+!.env.example
+browser_data/
+**/browser_data/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+.obsidian/
+
+# Test / temp
+tmp/
+.temp/
+*.bak

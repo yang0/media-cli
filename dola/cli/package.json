@@ -1,0 +1,15 @@
+{
+  "name": "dola-cli",
+  "version": "0.1.0",
+  "description": "Bun CLI for submitting text and image attachments to Dola chat through Chrome CDP.",
+  "type": "module",
+  "bin": {
+    "dola": "./src/cli.js"
+  },
+  "scripts": {
+    "check": "node --check src/cli.js",
+    "start": "bun src/cli.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

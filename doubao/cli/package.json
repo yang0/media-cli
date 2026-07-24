@@ -1,0 +1,17 @@
+{
+  "name": "doubao-img",
+  "version": "0.1.0",
+  "description": "Bun CLI that controls an existing Doubao browser session through Chrome CDP 9222 and downloads generated images.",
+  "type": "module",
+  "bin": {
+    "doubao-img": "./src/cli.js"
+  },
+  "scripts": {
+    "check": "node --check src/cli.js",
+    "start": "bun src/cli.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/bun": "^1.3.4"
+  }
+}

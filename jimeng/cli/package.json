@@ -1,0 +1,60 @@
+{
+  "name": "@yang0/jimeng-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "API-first CLI for Jimeng image and video generation workflows.",
+  "bin": {
+    "jimeng": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.en.md",
+    "README.zh-CN.md"
+  ],
+  "keywords": [
+    "jimeng",
+    "cli",
+    "aigc",
+    "image-generation",
+    "video-generation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yang0/jimeng-cli.git"
+  },
+  "homepage": "https://github.com/yang0/jimeng-cli#readme",
+  "bugs": {
+    "url": "https://github.com/yang0/jimeng-cli/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "commander": "^14.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "main": "dist/cli.js",
+  "directories": {
+    "test": "test"
+  },
+  "author": "",
+  "license": "ISC"
+}

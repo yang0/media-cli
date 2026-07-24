@@ -1,0 +1,23 @@
+{
+  "name": "flow-cli",
+  "version": "1.0.0",
+  "description": "CLI for Google Flow image generation via Chrome DevTools Protocol",
+  "main": "flow.mjs",
+  "bin": {
+    "flow-cli": "./flow.mjs"
+  },
+  "scripts": {
+    "test": "node flow.mjs \"一个小女孩在森林里走路\""
+  },
+  "keywords": ["google-flow", "cdp", "puppeteer", "image-generation"],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "puppeteer-core": "^25.3.0",
+    "yargs": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1"
+  }
+}

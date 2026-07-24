@@ -1,0 +1,30 @@
+{
+  "name": "higgsfield-bot",
+  "version": "1.0.0",
+  "description": "通过 Chrome DevTools Protocol 自动在 Higgsfield 上批量提交生图任务",
+  "main": "higgsfield-bot.js",
+  "bin": {
+    "higgsfield-bot": "higgsfield-bot.js"
+  },
+  "files": [
+    "higgsfield-bot.js"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "higgsfield",
+    "cdp",
+    "puppeteer",
+    "image-generation",
+    "cli"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "preferGlobal": true,
+  "dependencies": {
+    "commander": "^15.0.0",
+    "puppeteer-core": "^25.3.0"
+  }
+}
