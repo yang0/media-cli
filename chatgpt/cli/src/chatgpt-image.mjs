@@ -1,6 +1,6 @@
 /**
  * ChatGPT.com image generation helpers via CDP.
- * Logic ported from G:\初中\generate_wenyuan_grade8_images.mjs
+ * ChatGPT image-generation and download logic.
  * (selectors / send / wait / download proven on real batches).
  */
 

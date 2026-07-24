@@ -15,6 +15,8 @@ build/
 # Runtime / generated
 downloads/
 **/downloads/
+higgsfield-downloads/
+**/higgsfield-downloads/
 outputs/
 **/outputs/
 debug/

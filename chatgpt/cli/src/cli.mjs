@@ -2,7 +2,7 @@
 /**
  * chatgpt-img — generate images through chatgpt.com via Chrome CDP.
  *
- * Source logic: G:\初中\generate_wenyuan_grade8_images.mjs
+ * Standalone ChatGPT image-generation CLI.
  *
  * Prerequisites:
  *   chrome.exe --remote-debugging-port=9221
@@ -34,7 +34,7 @@ function printHelp() {
   node src/cli.mjs dry-run --port 9221
 
 选项：
-  --port <n>            CDP 端口（默认 9221，与 G:\\\\初中 脚本一致）
+  --port <n>            Chrome CDP port (default 9221)
   --prompt <text>       单条提示词
   --prompt-file <path>  从文件读提示词
   --prompts-dir <dir>   批量：目录内每个 .md/.txt 一条提示词
