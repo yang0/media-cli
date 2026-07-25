@@ -6,6 +6,37 @@
 - **一号一个 `storage_path` profile**（会话隔离）
 - 登录成功后 **导出 Netscape Cookie** → `G:\cookies\dola`，给 `media-cli` 号池用
 
+## 注入壳（对齐 reseller 生视频/下载）
+
+原软件逻辑：**WebView 打开已登录站 + 注入脚本**，生成由你在网页里操作；注入只负责 15s 与无水印下载。
+
+```bat
+cd e:\projectHome\media-cli\dola\webview
+REM 列出有 session 的 profile
+.\.venv\Scripts\python.exe inject_shell.py --list
+
+REM 打开注入壳（自动挑有 session 的号，或指定账号）
+inject_shell.cmd GlynisWilliams9z0h
+```
+
+注入内容（`inject/`）：
+
+| 脚本 | 作用 |
+|------|------|
+| `bridge.js` | 把 `chrome.webview.postMessage` 接到 pywebview 下载 |
+| `dola_fifteen_seconds.js` | 时长菜单加 15s + patch `completion` → seedance_v2.0 / duration=15 |
+| `dola_core.js` | 解析 vid / get_play_info，页面按钮「⬇ 下载视频/图片」 |
+| `dola_capture.js` | 资源捕获 |
+
+使用步骤：
+
+1. 先保证 profile 已登录（`login_one.cmd` 导出 cookie 的那个号）
+2. 开注入壳 → 进 `/chat`
+3. 自己点 **视频生成** → 传参考图（可 0 张）→ 时长选 **15s** → 发提示词
+4. 出片后点 **⬇ 下载视频**，文件进 `cli\downloads\inject`
+
+菜单：**Dola注入 → 重新注入脚本 / 打开下载目录**
+
 ## 安装
 
 ```bat

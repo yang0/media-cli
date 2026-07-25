@@ -56,3 +56,10 @@ Thumbs.db
 tmp/
 .temp/
 *.bak
+
+# local credentials
+dola/google_mail.txt
+dola/webview/accounts.json
+dola/webview/export_all_run*.log
+dola/webview/profiles/
+
