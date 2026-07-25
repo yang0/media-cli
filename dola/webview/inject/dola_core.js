@@ -16,9 +16,7 @@
     var observerActive = false;
 
     function sendToHost(data) {
-        if (window.chrome && window.chrome.webview) {
-            window.chrome.webview.postMessage(data);
-        }
+        if (typeof window.__dolaToHost === 'function') window.__dolaToHost(data);
     }
 
     // ==================== 原生函数备份 ====================
@@ -659,15 +657,27 @@
         injectStyles();
         setTimeout(scanDOM, 300);
         setTimeout(scanDOM, 1000);
-        var obs = new MutationObserver(function() { setTimeout(scanDOM, 200); });
+        var scanTimer = 0;
+        var scanRunning = false;
+        function scheduleScan() {
+            if (scanTimer || scanRunning) return;
+            scanTimer = setTimeout(function () {
+                scanTimer = 0;
+                scanRunning = true;
+                try { scanDOM(); } finally { scanRunning = false; }
+            }, 250);
+        }
+        var obs = new MutationObserver(scheduleScan);
         if (document.body) obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'style', 'poster', 'data-message-id'] });
-        setInterval(scanDOM, 3000);
+        setInterval(scheduleScan, 5000);
     }
 
-    // ==================== 启动 ====================
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', startObserver);
-    } else {
-        startObserver();
-    }
-}
+    // ==================== 启动（延后，避免 inject 时同步扫 DOM）====================
+    setTimeout(function () {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startObserver);
+        } else {
+            startObserver();
+        }
+    }, 0);
+})()

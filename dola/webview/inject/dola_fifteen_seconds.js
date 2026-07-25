@@ -157,23 +157,52 @@
         if (document.getElementById(STYLE_ID)) return;
         const style = document.createElement('style');
         style.id = STYLE_ID;
-        style.textContent = `[${MARK}="option"]{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:26px!important;cursor:pointer!important}[${MARK}="option"][${MARK}-check]{margin-left:auto;flex:0 0 auto;color:currentColor;font-size:18px;line-height:1}[${MARK}-native-check="hidden"]{visibility:hidden!important}`;
+        style.textContent =
+            `[${MARK}="option"]{display:flex!important;align-items:center!important;gap:26px!important;cursor:pointer!important}` +
+            `[${MARK}="option"][${MARK}-active="1"]::after{content:"\\2713";margin-left:auto;flex:0 0 auto;color:currentColor;font-size:18px;font-weight:600;line-height:1}` +
+            `[${MARK}-native-check="hidden"]{visibility:hidden!important}`;
         (document.head || document.documentElement).appendChild(style);
     }
 
     function closestClickable(el) {
         let current = el && el.nodeType === Node.TEXT_NODE ? el.parentElement : el;
         for (let i = 0; current && i < 7; i += 1, current = current.parentElement) {
-            if (current.tagName === 'BUTTON' || current.getAttribute('role') === 'button' || current.getAttribute('role') === 'menuitem' || current.getAttribute('role') === 'option' || current.tabIndex >= 0 || /pointer/.test(String(getComputedStyle(current).cursor || ''))) return current;
+            const role = current.getAttribute('role');
+            if (current.tagName === 'BUTTON' || role === 'button' || role === 'menuitem' || role === 'menuitemradio' || role === 'menuitemcheckbox' || role === 'option' || current.tabIndex >= 0 || /pointer/.test(String(getComputedStyle(current).cursor || ''))) return current;
         }
         return el && el.parentElement;
     }
 
     function findDurationMenuRoot() {
         if (!document.body) return null;
-        return Array.from(document.querySelectorAll('[role="menu"], [data-slot*="dropdown-menu"], div'))
-            .filter(visible).filter(el => { const t = text(el); return t.length <= 220 && /时长/.test(t) && /5s/.test(t) && /10s/.test(t) && !/Seedance/.test(t) && !/比例/.test(t); })
-            .sort((a, b) => (a.getBoundingClientRect().width * a.getBoundingClientRect().height) - (b.getBoundingClientRect().width * b.getBoundingClientRect().height))[0] || null;
+        // NEVER querySelectorAll('div') on SPA — freezes renderer ("此页存在问题")
+        var sels = [
+            '[role="menu"]',
+            '[role="listbox"]',
+            '[data-slot*="dropdown-menu"]',
+            '[data-radix-menu-content]',
+            '[class*="dropdown-menu"]',
+            '[class*="DropdownMenu"]',
+            '[class*="duration"]',
+            '[class*="Duration"]'
+        ];
+        var nodes = [];
+        for (var s = 0; s < sels.length; s++) {
+            try {
+                var found = document.querySelectorAll(sels[s]);
+                for (var i = 0; i < found.length; i++) nodes.push(found[i]);
+            } catch (_) {}
+        }
+        return nodes
+            .filter(visible)
+            .filter(function (el) {
+                var t = text(el);
+                return t.length <= 220 && /时长/.test(t) && /5s/.test(t) && /10s/.test(t) && !/Seedance/.test(t) && !/比例/.test(t);
+            })
+            .sort(function (a, b) {
+                var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+                return (ra.width * ra.height) - (rb.width * rb.height);
+            })[0] || null;
     }
 
     function optionTextNodes(root) {
@@ -191,6 +220,14 @@
             for (let i = out.length - 1; i >= 0; i--) { if (item.contains(out[i])) out.splice(i, 1); }
             out.push(item);
         }
+        // Injected rows are not owned by React and may not have exactly the
+        // same clickable/text structure as native rows after a rerender.
+        // Include them by our stable marker so MutationObserver cannot clone
+        // duplicate 15s options or render selection state on the wrong row.
+        root.querySelectorAll(`[${MARK}="option"]`).forEach(item => {
+            const markedParent = item.parentElement && item.parentElement.closest(`[${MARK}="option"]`);
+            if (!markedParent && !out.includes(item)) out.push(item);
+        });
         return out;
     }
 
@@ -208,21 +245,38 @@
 
     function scrubClone(clone) {
         clone.removeAttribute('aria-selected'); clone.removeAttribute('aria-checked'); clone.removeAttribute('checked'); clone.removeAttribute('selected');
-        removeOwnChecks(clone); clone.removeAttribute(`${MARK}-active`);
+        clone.removeAttribute('data-state');
+        // Native rows are bound before we choose one as the clone template.
+        // cloneNode copies those data attributes, so remove all injected state
+        // from the entire clone before turning it into the synthetic 15s row.
+        [clone, ...clone.querySelectorAll('*')].forEach(node => {
+            node.removeAttribute(MARK);
+            node.removeAttribute(`${MARK}-active`);
+            node.removeAttribute(`${MARK}-native`);
+            node.removeAttribute(`${MARK}-trigger`);
+            node.removeAttribute(`${MARK}-native-check`);
+            node.removeAttribute('data-state');
+        });
+        removeOwnChecks(clone);
         const node = durationTextNode(clone); if (node) node.nodeValue = '15s'; else clone.textContent = '15s';
     }
 
     function setToolbarText(seconds) {
         const next = seconds === TARGET_DURATION ? '15s' : `${seconds}s`;
+        const durationMenu = findDurationMenuRoot();
         const nodes = []; const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode(n) { return /^\s*(5|10|15)(s|秒)\s*$/.test(n.nodeValue || '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT; } });
         while (w.nextNode()) nodes.push(w.currentNode);
         for (const node of nodes) {
+            // Never rewrite the 5s/10s rows inside the open duration menu.
+            // Doing so makes the menu unrecognizable and breaks selection
+            // rendering on compact layouts where body text is short.
+            if (durationMenu && durationMenu.contains(node)) continue;
             const parent = node.parentElement; if (!visible(parent)) continue;
             const click = closestClickable(parent); if (!click || !visible(click)) continue;
             let cur = click.parentElement;
-            for (let i = 0; cur && i < 7; i += 1, cur = cur.parentElement) {
+            for (let i = 0; cur && cur !== document.body && cur !== document.documentElement && i < 7; i += 1, cur = cur.parentElement) {
                 const t = text(cur); if (/Seedance/.test(t) && /比例/.test(t) && t.length < 260) {
-                    node.nodeValue = next;
+                    if (node.nodeValue !== next) node.nodeValue = next;
                     if (!click.hasAttribute(`${MARK}-trigger`)) { click.setAttribute(`${MARK}-trigger`, '1'); click.addEventListener('click', () => { setTimeout(inject15Option, 80); setTimeout(inject15Option, 240); }, true); }
                     break;
                 }
@@ -232,16 +286,65 @@
 
     function renderChecks(options) {
         const sel = selectedDuration() === TARGET_DURATION;
-        for (const item of options) { const v = exactDuration(item); if (v === 5 || v === 10) setNativeChecksHidden(item, sel); if (v === TARGET_DURATION) { removeOwnChecks(item); setNativeChecksHidden(item, !sel); } item.removeAttribute(`${MARK}-active`); }
+        for (const item of options) {
+            const v = exactDuration(item);
+            if (v === 5 || v === 10) {
+                setNativeChecksHidden(item, sel);
+                item.removeAttribute(`${MARK}-active`);
+                continue;
+            }
+            if (v !== TARGET_DURATION) continue;
+
+            // A 15s row is cloned from a native option, whose check icon and
+            // data-state may describe the old 5s/10s selection. Never use that
+            // stale visual state; render our own deterministic check instead.
+            removeOwnChecks(item);
+            setNativeChecksHidden(item, true);
+            if (sel) item.setAttribute(`${MARK}-active`, '1');
+            else item.removeAttribute(`${MARK}-active`);
+
+            const role = item.getAttribute('role') || '';
+            if (role === 'option' || item.hasAttribute('aria-selected')) {
+                item.setAttribute('aria-selected', sel ? 'true' : 'false');
+            }
+            if (role === 'menuitemradio' || role === 'menuitemcheckbox' || item.hasAttribute('aria-checked')) {
+                item.setAttribute('aria-checked', sel ? 'true' : 'false');
+            }
+            item.setAttribute('data-state', sel ? 'checked' : 'unchecked');
+        }
     }
     function bindNative(item, seconds) { if (item.hasAttribute(`${MARK}-native`)) return; item.setAttribute(`${MARK}-native`, String(seconds)); item.addEventListener('click', () => { saveDuration(0); setToolbarText(seconds); setTimeout(inject15Option, 80); }, true); }
-    function bind15(item) { if (item.hasAttribute(MARK)) return; item.setAttribute(MARK, 'option'); item.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); saveDuration(TARGET_DURATION); setToolbarText(TARGET_DURATION); setTimeout(() => document.body && document.body.click(), 30); }, true); }
+    function bind15(item) {
+        item.querySelectorAll(`[${MARK}="option"]`).forEach(child => {
+            child.removeAttribute(MARK);
+            child.removeAttribute(`${MARK}-active`);
+            child.removeAttribute('data-state');
+            child.removeAttribute('aria-selected');
+            child.removeAttribute('aria-checked');
+        });
+        if (item.hasAttribute(MARK)) return;
+        item.setAttribute(MARK, 'option');
+        function select15(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            saveDuration(TARGET_DURATION);
+            setToolbarText(TARGET_DURATION);
+            const root = findDurationMenuRoot();
+            if (root) renderChecks(findMenuOptions(root));
+            setTimeout(() => document.body && document.body.click(), 80);
+        }
+        item.addEventListener('click', select15, true);
+        item.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') select15(e);
+        }, true);
+    }
 
     function inject15Option() {
         const root = findDurationMenuRoot(); if (!root) return;
         const options = findMenuOptions(root); if (!options.length) return;
         for (const item of options) { const v = exactDuration(item); if (v === 5 || v === 10) bindNative(item, v); if (v === TARGET_DURATION) bind15(item); }
-        if (!options.some(item => exactDuration(item) === TARGET_DURATION)) {
+        const existing15 = root.querySelector(`[${MARK}="option"]`);
+        if (!existing15 && !options.some(item => exactDuration(item) === TARGET_DURATION)) {
             const after = options.find(item => exactDuration(item) === 10) || options[options.length - 1];
             const template = options.find(item => exactDuration(item) === 5) || after;
             if (!after || !template || !after.parentElement) return;
@@ -252,21 +355,29 @@
     }
 
     function tick() { if (selectedDuration() === TARGET_DURATION) setToolbarText(TARGET_DURATION); inject15Option(); }
-    function schedule() { clearTimeout(timer); timer = setTimeout(tick, 100); }
+    function schedule() {
+        if (timer) return;
+        timer = setTimeout(function () { timer = 0; tick(); }, 200);
+    }
 
     function start() {
         installStyle(); tick();
         const observer = new MutationObserver(schedule);
-        const waitBody = () => { if (!document.body) return setTimeout(waitBody, 200); observer.observe(document.body, { childList: true, subtree: true, characterData: true }); schedule(); };
+        const waitBody = () => { if (!document.body) return setTimeout(waitBody, 200); observer.observe(document.body, { childList: true, subtree: true }); schedule(); };
         waitBody();
     }
 
-    // ===== 立即执行 + 守护 =====
+    // ===== 轻量立即执行 + UI 延后（避免 inject 同步扫 DOM 卡死渲染进程）=====
     patchFetch();
     patchXhr();
     startFetchGuard();
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => setTimeout(start, 200));
-    } else { start(); }
-}
+    // Always defer UI work so evaluate_js / <script> inject can return immediately.
+    setTimeout(function () {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function () { setTimeout(start, 200); });
+        } else {
+            start();
+        }
+    }, 0);
+})()

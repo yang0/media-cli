@@ -8,6 +8,21 @@
 
 ## 注入壳（对齐 reseller 生视频/下载）
 
+手动测试视频生成时，可直接双击：
+
+```bat
+manual_video_test.cmd
+```
+
+默认使用 `GlynisWilliams9z0h`。也可指定其他已登录账号：
+
+```bat
+manual_video_test.cmd CorettaCagle4vmrx
+manual_video_test.cmd list
+```
+
+手动下载的视频保存在 `..\cli\downloads\inject`。
+
 原软件逻辑：**WebView 打开已登录站 + 注入脚本**，生成由你在网页里操作；注入只负责 15s 与无水印下载。
 
 ```bat
@@ -28,12 +43,26 @@ inject_shell.cmd GlynisWilliams9z0h
 | `dola_core.js` | 解析 vid / get_play_info，页面按钮「⬇ 下载视频/图片」 |
 | `dola_capture.js` | 资源捕获 |
 
-使用步骤：
+使用步骤（手动，对齐原软件）：
 
 1. 先保证 profile 已登录（`login_one.cmd` 导出 cookie 的那个号）
 2. 开注入壳 → 进 `/chat`
 3. 自己点 **视频生成** → 传参考图（可 0 张）→ 时长选 **15s** → 发提示词
 4. 出片后点 **⬇ 下载视频**，文件进 `cli\downloads\inject`
+
+自动生成 + 下载（WebView，不走 CDP）：
+
+```bat
+inject_shell.cmd auto GlynisWilliams9z0h 15 E:\temp\avarta.png
+```
+
+或：
+
+```bat
+.\.venv\Scripts\python.exe inject_shell.py --account GlynisWilliams9z0h --auto --duration 15 --aspect-ratio 9:16 --file E:\temp\avarta.png --prompt "..." --out ..\cli\downloads\inject --close
+```
+
+流程：注入脚本 → 点视频生成 → 传 0–n 图 → 填词 → 发送 → 轮询无水印 URL → 下载。
 
 菜单：**Dola注入 → 重新注入脚本 / 打开下载目录**
 

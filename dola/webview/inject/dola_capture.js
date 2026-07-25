@@ -37,8 +37,8 @@
         if (!data.coverUrl && data.type === 'image') {
             data.coverUrl = data.url;
         }
-        if (window.chrome && window.chrome.webview) {
-            window.chrome.webview.postMessage({ type: 'newResource', data: data });
+        if (typeof window.__dolaToHost === 'function') {
+            window.__dolaToHost({ type: 'newResource', data: data });
         }
     }
 
@@ -178,15 +178,25 @@
     }
 
     function start() {
-        scanImages();
-        scanVideos();
-        setTimeout(function() { scanImages(); scanVideos(); }, 800);
-        setTimeout(function() { scanImages(); scanVideos(); }, 2000);
+        var scanTimer = 0;
+        var scanRunning = false;
+        function runScan() {
+            if (scanRunning) return;
+            scanRunning = true;
+            try { scanImages(); scanVideos(); } finally { scanRunning = false; }
+        }
+        function scheduleScan(delay) {
+            if (scanTimer) return;
+            scanTimer = setTimeout(function () {
+                scanTimer = 0;
+                runScan();
+            }, typeof delay === 'number' ? delay : 300);
+        }
+        runScan();
+        setTimeout(runScan, 1000);
+        setTimeout(runScan, 2500);
 
-        var observer = new MutationObserver(function () {
-            scanImages();
-            scanVideos();
-        });
+        var observer = new MutationObserver(function () { scheduleScan(300); });
         if (document.body) {
             observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'style', 'poster', 'data-message-id'] });
         } else {
@@ -195,24 +205,24 @@
             });
         }
 
-        setInterval(function () { scanImages(); scanVideos(); }, 3000);
+        setInterval(function () { scheduleScan(0); }, 5000);
 
         var lastUrl = location.href;
         setInterval(function () {
             if (location.href !== lastUrl) {
                 lastUrl = location.href;
                 sentUrls = new Set();
-                if (window.chrome && window.chrome.webview) {
-                    window.chrome.webview.postMessage({ type: 'pageChanged' });
+                if (typeof window.__dolaToHost === 'function') {
+                    window.__dolaToHost({ type: 'pageChanged' });
                 }
-                setTimeout(function () { scanImages(); scanVideos(); }, 1000);
+                scheduleScan(1000);
             }
         }, 1000);
     }
 
     var retries = 0;
     function waitForWebview() {
-        if (window.chrome && window.chrome.webview) {
+        if (typeof window.__dolaToHost === 'function') {
             setTimeout(start, 1000);
             return;
         }
@@ -221,4 +231,4 @@
         else { console.error('[DolaCapture] webview 超时未就绪'); }
     }
     waitForWebview();
-}
+})()

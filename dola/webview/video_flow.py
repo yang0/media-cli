@@ -30,6 +30,18 @@ PATCH_JS = (ROOT / "video_patch.js").read_text(encoding="utf-8")
 def _log(log: Optional[LogFn], msg: str) -> None:
     if log:
         log(msg)
+    else:
+        print(f"[video_flow] {msg}", flush=True)
+
+
+def _log_exc(log: Optional[LogFn], msg: str, exc: BaseException) -> None:
+    import traceback
+
+    text = f"{msg}: {exc}\n{traceback.format_exc()}"
+    if log:
+        log(text)
+    else:
+        print(f"[video_flow] {text}", flush=True)
 
 
 def _plain_force_helpers() -> str:
@@ -190,19 +202,51 @@ JS_FIND_VIDEOS = r"""
   const push = u => {
     if (!u || typeof u !== 'string') return;
     if (!/^https?:\/\//i.test(u)) return;
-    if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(u) || /mime_type=video_|rc_gen_video|video_gen/i.test(u)) urls.add(u);
+    if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(u) || /mime_type=video_|rc_gen_video|video_gen|play/i.test(u)) urls.add(u);
   };
   document.querySelectorAll('video, video source, a[href]').forEach(el => {
     push(el.currentSrc || el.src || el.href || el.getAttribute('src') || el.getAttribute('href') || '');
   });
-  // records captured by fetch hook if present
+  try { (window.__dolaCliImageRecords || []).forEach(r => push(r && r.url)); } catch (e) {}
+  try { (window.__dolaCliLastVideoUrls || []).forEach(push); } catch (e) {}
+
+  // Reseller core: messageId → vid → get_play_info no-watermark URL
   try {
-    (window.__dolaCliImageRecords || []).forEach(r => push(r && r.url));
+    const blocks = document.querySelectorAll(
+      '[class*="block-video"], [class*="video-block"], [class*="VideoBlock"], [class*="video-container"], video'
+    );
+    blocks.forEach(el => {
+      let mid = null;
+      let cur = el;
+      for (let i = 0; i < 22 && cur && cur !== document.body; i++, cur = cur.parentElement) {
+        if (cur.dataset && (cur.dataset.messageId || cur.dataset.message_id)) {
+          mid = cur.dataset.messageId || cur.dataset.message_id;
+          break;
+        }
+        const attr = cur.getAttribute && (cur.getAttribute('data-message-id') || cur.getAttribute('data-messageId'));
+        if (attr) { mid = attr; break; }
+      }
+      let vid = null;
+      if (mid && window.__dolaGetVidByMessageId) vid = window.__dolaGetVidByMessageId(String(mid));
+      if (!vid) {
+        const v = el.tagName === 'VIDEO' ? el : el.querySelector && el.querySelector('video');
+        const src = v && (v.currentSrc || v.src);
+        if (src) {
+          const m = src.match(/\/(v0[a-zA-Z0-9_-]+)/);
+          if (m) vid = m[1];
+        }
+      }
+      if (vid && window.__dolaResolveVideoUrl) {
+        try {
+          const r = window.__dolaResolveVideoUrl(vid);
+          if (r && r.mainUrl) push(r.mainUrl);
+        } catch (e) {}
+      } else if (vid && window.__dolaGetVideoUrl) {
+        push(window.__dolaGetVideoUrl(vid));
+      }
+    });
   } catch (e) {}
-  try {
-    if (window.__dolaCliLastVideoUrls) window.__dolaCliLastVideoUrls.forEach(push);
-  } catch (e) {}
-  return Array.from(urls).slice(0, 30);
+  return Array.from(urls).slice(0, 40);
 })()
 """
 
@@ -307,6 +351,7 @@ def run_video_generation(
     close_when_done: bool = False,
 ) -> dict[str, Any]:
     """Drive full video gen inside an already-open WebView window (logged-in profile)."""
+    t_all = time.time()
     prompt = (prompt or "").strip()
     if not prompt:
         raise ValueError("prompt is required")
@@ -320,87 +365,158 @@ def run_video_generation(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    _log(
+        log,
+        f">>> video_flow begin duration={duration}s ratio={ratio} model={model or '-'} "
+        f"refs={len(refs)} timeout={timeout}s out={out_dir}",
+    )
+    _log(log, f"prompt[{len(prompt)}]={prompt[:240]!r}")
+    for i, rp in enumerate(refs):
+        p = Path(rp)
+        _log(log, f"  ref[{i}] path={rp} exists={p.is_file()} size={p.stat().st_size if p.is_file() else 0}")
+
     # Ensure on chat (and wait until evaluate works after navigation)
     def wait_eval_ok(seconds: float = 20) -> bool:
         deadline = time.time() + seconds
+        n = 0
         while time.time() < deadline:
+            n += 1
             try:
                 href = window.evaluate_js("(() => location.href)()")
                 if href and "dola.com" in str(href):
+                    _log(log, f"wait_eval_ok ok after n={n} href={str(href)[:120]}")
                     return True
-            except Exception:
-                pass
+                if n % 10 == 0:
+                    _log(log, f"wait_eval_ok n={n} href={href!r}")
+            except Exception as exc:
+                if n % 5 == 0:
+                    _log(log, f"wait_eval_ok n={n} err={type(exc).__name__}: {exc}")
             time.sleep(0.4)
+        _log(log, f"wait_eval_ok FAILED after {seconds}s n={n}")
         return False
 
     try:
         url = window.get_current_url() or ""
-    except Exception:
+    except Exception as exc:
         url = ""
-    if "dola.com" not in (url or "") or "/auth/" in (url or "") or "/chat" not in (url or ""):
-        window.load_url("https://www.dola.com/chat")
+        _log(log, f"get_current_url failed: {exc}")
+    on_chat = "dola.com" in (url or "") and "/chat" in (url or "") and "/auth/" not in (url or "")
+    _log(log, f"nav check on_chat={on_chat} url={url[:120]!r}")
+    if not on_chat:
+        _log(log, f"navigate to /chat from {url[:80]!r}")
+        try:
+            window.load_url("https://www.dola.com/chat")
+        except Exception as exc:
+            _log_exc(log, "load_url warn", exc)
+        if not wait_eval_ok(30):
+            raise RuntimeError("WebView did not load dola.com/chat")
+        time.sleep(2.0)
     else:
-        window.load_url("https://www.dola.com/chat")
-    if not wait_eval_ok(25):
-        raise RuntimeError("WebView did not load dola.com/chat")
-    time.sleep(1.5)
+        _log(log, f"already on chat: {url[:100]}")
+        if not wait_eval_ok(10):
+            _log(log, "evaluate stale; reload /chat")
+            try:
+                window.load_url("https://www.dola.com/chat")
+            except Exception as exc:
+                _log_exc(log, "reload load_url", exc)
+            if not wait_eval_ok(25):
+                raise RuntimeError("WebView did not load dola.com/chat")
+        time.sleep(1.0)
 
-    # Configure patch globals + inject
+    # Duration preference for reseller fifteen_seconds inject (localStorage)
+    if duration >= 15:
+        rls = js_eval(
+            window,
+            "(() => { try { localStorage.setItem('dola_video_duration_choice','15'); return localStorage.getItem('dola_video_duration_choice'); } catch(e) { return String(e); } })()",
+        )
+        _log(log, f"localStorage duration choice -> {rls!r}")
+    else:
+        js_eval(
+            window,
+            "(() => { try { localStorage.removeItem('dola_video_duration_choice'); } catch(e) {} return true; })()",
+        )
+
+    # Always install lightweight completion patch (works with or without full inject shell)
     _log(log, f"inject video patch duration={duration}s model={model or '-'} ratio={ratio or '-'}")
-    js_eval(
+    cfg = js_eval(
         window,
-        f"(() => {{ window.__dolaVideoDuration={duration}; window.__dolaVideoModel={json.dumps(model)}; window.__dolaVideoRatio={json.dumps(ratio)}; return true; }})()",
+        f"(() => {{ window.__dolaVideoDuration={duration}; window.__dolaVideoModel={json.dumps(model)}; window.__dolaVideoRatio={json.dumps(ratio)}; return {{d:window.__dolaVideoDuration,m:window.__dolaVideoModel,r:window.__dolaVideoRatio}}; }})()",
     )
+    _log(log, f"patch config: {cfg}")
+    t0 = time.time()
     patch_res = js_eval(window, PATCH_JS)
-    _log(log, f"patch: {patch_res}")
+    _log(log, f"patch: {patch_res} ({time.time() - t0:.2f}s)")
     hook_res = js_eval(window, JS_INSTALL_VIDEO_URL_HOOK)
     _log(log, f"url-hook: {hook_res}")
 
-    # Step 1: video mode
-    _log(log, "step1: click 视频生成")
+    # Step 1: video mode FIRST (before attach — matches reseller mental model)
+    _log(log, ">>> step1: click 视频生成")
     r1 = js_eval(window, JS_CLICK_VIDEO)
     _log(log, f"video mode: {r1}")
-    time.sleep(1.5)
+    if isinstance(r1, dict) and not r1.get("ok"):
+        _log(log, f"video-btn sample labels: {(r1 or {}).get('sample')}")
+    time.sleep(2.0)
 
-    # Step 2: attach 0-n images
-    _log(log, f"step2: attach refs count={len(refs)}")
+    # Step 2: attach 0-n images (DataTransfer — no CDP)
+    _log(log, f">>> step2: attach refs count={len(refs)}")
     if refs:
-        files = load_ref_files_b64(refs)
-        # large payload: attach one-by-one if many, single DataTransfer if few
+        try:
+            files = load_ref_files_b64(refs)
+            total_b64 = sum(len(f.get("b64") or "") for f in files)
+            _log(log, f"ref payload names={[f['name'] for f in files]} total_b64_chars={total_b64}")
+        except Exception as exc:
+            _log_exc(log, "load_ref_files_b64 failed", exc)
+            raise
+        t0 = time.time()
         r2 = js_eval(window, js_attach_files_b64(files))
-        _log(log, f"attach: {r2}")
+        _log(log, f"attach: {r2} ({time.time() - t0:.2f}s)")
         if not (isinstance(r2, dict) and r2.get("ok")):
             raise RuntimeError(f"attach failed: {r2}")
-        # wait for send to enable / upload settle — poll lightly
-        for i in range(40):
-            st = js_eval(window, JS_SEND_STATE) or {}
+        # Give SPA time to process large refs WITHOUT tight evaluate spam
+        time.sleep(3.0)
+        for i in range(50):
+            try:
+                st = js_eval(window, JS_SEND_STATE) or {}
+            except Exception as exc:
+                _log(log, f"send-state warm {i}: {exc}")
+                time.sleep(0.8)
+                continue
+            if i % 5 == 0:
+                _log(log, f"send-state poll[{i}]: {st}")
             if isinstance(st, dict) and st.get("sendEnabled"):
-                _log(log, f"send enabled after attach ({i})")
+                _log(log, f"send enabled after attach (poll={i})")
                 break
-            time.sleep(0.5)
+            time.sleep(0.6)
         else:
             _log(log, "send still disabled after attach wait; continue anyway")
+        time.sleep(1.0)
     else:
-        _log(log, "no reference images")
+        _log(log, "no reference images (text-only video)")
 
-    # Step 3: prompt
-    _log(log, "step3: fill prompt")
+    # Step 3: prompt AFTER attach
+    _log(log, ">>> step3: fill prompt")
     fill_js = JS_FILL_PROMPT.replace("%PROMPT%", json.dumps(prompt, ensure_ascii=False))
-    r3 = js_eval(window, fill_js)
-    _log(log, f"fill: {r3}")
+    r3 = None
+    for i in range(8):
+        r3 = js_eval(window, fill_js)
+        _log(log, f"fill try {i}: {r3}")
+        if isinstance(r3, dict) and r3.get("ok"):
+            break
+        time.sleep(1.0)
     if not (isinstance(r3, dict) and r3.get("ok")):
         raise RuntimeError(f"fill prompt failed: {r3}")
-    time.sleep(0.6)
+    time.sleep(0.8)
 
     # Step 4: submit
-    _log(log, "step4: submit")
-    for attempt in range(1, 8):
+    _log(log, ">>> step4: submit")
+    for attempt in range(1, 10):
         st = js_eval(window, JS_SEND_STATE) or {}
         _log(log, f"send-state: {st}")
         r4 = js_eval(window, JS_CLICK_SEND)
         _log(log, f"send click[{attempt}]: {r4}")
-        time.sleep(1.2)
+        time.sleep(1.5)
         st2 = js_eval(window, JS_SEND_STATE) or {}
+        _log(log, f"send-state after click: {st2}")
         if isinstance(st2, dict) and int(st2.get("promptLen") or 0) < max(8, len(prompt) // 3):
             _log(log, "composer cleared — submit accepted")
             break
@@ -409,36 +525,55 @@ def run_video_generation(
         _log(log, "warn: composer may still hold prompt; waiting for video anyway")
 
     # Step 5: wait video urls + download
-    _log(log, "step5: wait for video + download")
+    _log(log, f">>> step5: wait for video + download (timeout={timeout}s)")
     deadline = time.time() + timeout
     best_url = ""
+    poll = 0
     while time.time() < deadline:
-        urls = js_eval(window, JS_FIND_VIDEOS) or []
+        poll += 1
+        remaining = deadline - time.time()
+        try:
+            urls = js_eval(window, JS_FIND_VIDEOS) or []
+        except Exception as exc:
+            _log(log, f"find-videos poll[{poll}] err: {exc}")
+            time.sleep(3.0)
+            continue
         if isinstance(urls, list) and urls:
             best_url = prefer_video_url([str(u) for u in urls])
-            _log(log, f"found {len(urls)} video url(s); prefer={best_url[:120]}")
+            _log(log, f"found {len(urls)} video url(s) poll={poll}; prefer={best_url[:160]}")
+            for j, u in enumerate(urls[:8]):
+                _log(log, f"  url[{j}]={str(u)[:180]}")
             if best_url:
                 break
+        elif poll % 5 == 0:
+            _log(log, f"still waiting video… poll={poll} remaining={remaining:.0f}s")
         time.sleep(3.0)
 
     if not best_url:
-        raise TimeoutError(f"no video URL within {timeout}s")
+        raise TimeoutError(f"no video URL within {timeout}s (polls={poll})")
 
     ext = "mp4"
     if ".webm" in best_url.lower():
         ext = "webm"
     out_path = out_dir / f"dola_video_{duration}s_{int(time.time())}.{ext}"
     _log(log, f"downloading -> {out_path}")
-    download_url(best_url, out_path)
-    _log(log, f"saved {out_path} ({out_path.stat().st_size} bytes)")
+    t0 = time.time()
+    try:
+        download_url(best_url, out_path)
+    except Exception as exc:
+        _log_exc(log, "download_url failed", exc)
+        raise
+    size = out_path.stat().st_size
+    _log(log, f"saved {out_path} ({size} bytes, {time.time() - t0:.1f}s)")
 
     if close_when_done:
+        _log(log, "close_when_done → destroy window")
         try:
             window.destroy()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log_exc(log, "window.destroy", exc)
 
-    return {
+    result = {
         "ok": True,
         "file": str(out_path),
         "url": best_url,
@@ -446,5 +581,8 @@ def run_video_generation(
         "aspectRatio": ratio,
         "model": model,
         "refs": refs,
-        "size": out_path.stat().st_size,
+        "size": size,
+        "elapsedSec": round(time.time() - t_all, 1),
     }
+    _log(log, f">>> video_flow DONE elapsed={result['elapsedSec']}s file={out_path}")
+    return result

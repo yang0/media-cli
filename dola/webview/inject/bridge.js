@@ -1,49 +1,52 @@
 /**
  * Bridge original reseller inject scripts to pywebview host.
- * Original scripts call: window.chrome.webview.postMessage({type, url, filename, ...})
- * We also route to window.pywebview.api when available.
+ *
+ * CRITICAL: Do not replace chrome.webview.postMessage. pywebview uses that
+ * native function for its own RPC protocol. Wrapping it makes business messages
+ * recursively re-enter pywebview as ["on_message", ...] and eventually crashes
+ * the renderer.
+ *
+ * Strategy:
+ *  - All host messages go into window.__dolaMsgQueue
+ *  - Python pulls this queue with evaluate_js from its GUI callback
+ *  - The native WebView2 / pywebview bridge is left completely untouched
  */
 (function () {
   if (window.__dolaBridgeLoaded) return;
   window.__dolaBridgeLoaded = true;
 
+  window.__dolaMsgQueue = window.__dolaMsgQueue || [];
+  function enqueue(payload) {
+    try {
+      // These are snapshots, not commands. Keeping only the newest pending
+      // snapshot prevents generation-time DOM churn from filling the queue.
+      var type = payload && typeof payload === "object" && payload.type;
+      if (type === "videoUrlUpdate" || type === "imageDataExtracted") {
+        for (var i = window.__dolaMsgQueue.length - 1; i >= 0; i--) {
+          var queued = window.__dolaMsgQueue[i];
+          if (queued && typeof queued === "object" && queued.type === type) {
+            window.__dolaMsgQueue[i] = payload;
+            return;
+          }
+        }
+      }
+      window.__dolaMsgQueue.push(payload);
+      if (window.__dolaMsgQueue.length > 100) {
+        window.__dolaMsgQueue.splice(0, window.__dolaMsgQueue.length - 100);
+      }
+    } catch (e) {}
+  }
+
   function toHost(payload) {
-    try {
-      if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.on_message === "function") {
-        // pywebview may require string or plain object depending on version
-        window.pywebview.api.on_message(typeof payload === "string" ? payload : JSON.stringify(payload));
-      }
-    } catch (e) {
-      console.warn("[dola-bridge] pywebview.api failed", e);
-    }
-    try {
-      if (window.chrome && window.chrome.webview && typeof window.chrome.webview.postMessage === "function") {
-        window.chrome.webview.postMessage(payload);
-      }
-    } catch (e2) {}
+    enqueue(payload);
   }
 
-  // Ensure chrome.webview exists for original scripts
-  if (!window.chrome) window.chrome = {};
-  if (!window.chrome.webview) {
-    window.chrome.webview = {
-      postMessage: function (data) {
-        toHost(data);
-      },
-    };
-  } else {
-    var orig = window.chrome.webview.postMessage.bind(window.chrome.webview);
-    window.chrome.webview.postMessage = function (data) {
-      toHost(data);
-      try {
-        return orig(data);
-      } catch (e) {}
-    };
-  }
+  window.__dolaToHost = toHost;
+  window.__dolaPostMessage = toHost;
 
-  // Status badge so user sees inject is active
   function showBadge() {
     if (document.getElementById("__dola_inject_badge")) return;
+    if (!document.body && !document.documentElement) return;
     var el = document.createElement("div");
     el.id = "__dola_inject_badge";
     el.textContent = "Dola注入壳 · 15s+无水印";
@@ -59,10 +62,14 @@
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", showBadge);
+    document.addEventListener("DOMContentLoaded", function () {
+      setTimeout(showBadge, 0);
+    });
   } else {
-    showBadge();
+    setTimeout(showBadge, 0);
   }
 
+  // Single ready log — only once per load
+  enqueue({ type: "log", msg: "bridge ready href=" + (location && location.href) });
   console.log("[dola-bridge] ready");
 })();
