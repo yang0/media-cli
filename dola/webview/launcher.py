@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tkinter as tk
+from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog
 
@@ -20,6 +21,7 @@ from daily_profile_usage import DAILY_CREDIT_LIMIT, get_balance
 
 ROOT = Path(__file__).resolve().parent
 PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
+PYTHONW = ROOT / ".venv" / "Scripts" / "pythonw.exe"
 SHELL = ROOT / "dola_webview.py"
 INJECT_SHELL = ROOT / "inject_shell.py"
 PROFILES = ROOT / "profiles"
@@ -29,6 +31,29 @@ STATE = ROOT / "accounts.json"
 
 def py() -> str:
     return str(PYTHON if PYTHON.exists() else sys.executable)
+
+
+def pyw() -> str:
+    return str(PYTHONW if PYTHONW.exists() else py())
+
+
+def launch_hidden(cmd: list[str], log_prefix: str) -> subprocess.Popen:
+    logs_dir = ROOT / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = logs_dir / f"{log_prefix}_{stamp}.log"
+    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    stream = log_path.open("a", encoding="utf-8")
+    try:
+        return subprocess.Popen(
+            cmd,
+            cwd=str(ROOT),
+            creationflags=creation_flags,
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+        )
+    finally:
+        stream.close()
 
 
 def load_meta() -> dict:
@@ -419,7 +444,7 @@ class App(tk.Tk):
             self.status.set(f"启动注入壳: {acc}  (preflight warn: {exc})")
 
         cmd = [
-            py(),
+            pyw(),
             "-u",
             str(INJECT_SHELL),
             "--account",
@@ -433,11 +458,7 @@ class App(tk.Tk):
             "--log-dir",
             str(ROOT / "logs"),
         ]
-        # Detached console so fatal errors are visible instead of a silent flash
-        flags = 0
-        if sys.platform == "win32":
-            flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-        subprocess.Popen(cmd, cwd=str(ROOT), creationflags=flags)
+        launch_hidden(cmd, f"inject_{acc}")
 
     def auto_login_from_file(self) -> None:
         accounts = ROOT.parent / "google_mail.txt"
@@ -448,7 +469,7 @@ class App(tk.Tk):
         if idx is None:
             return
         cmd = [
-            py(),
+            pyw(),
             str(SHELL),
             "--accounts",
             str(accounts),
@@ -464,7 +485,7 @@ class App(tk.Tk):
             "300",
         ]
         self.status.set(f"自动登录 google_mail[{idx}]（先登录，成功后再导出 cookie）")
-        subprocess.Popen(cmd, cwd=str(ROOT))
+        launch_hidden(cmd, f"login_{idx}")
 
     def batch_export_from_file(self) -> None:
         selected = filedialog.askopenfilename(
@@ -511,7 +532,7 @@ class App(tk.Tk):
             return
 
         cmd = [
-            py(),
+            pyw(),
             "-u",
             str(ROOT / "batch_export.py"),
             "--accounts",
@@ -523,8 +544,7 @@ class App(tk.Tk):
             "--login-timeout",
             "300",
         ]
-        flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if sys.platform == "win32" else 0
-        subprocess.Popen(cmd, cwd=str(ROOT), creationflags=flags)
+        launch_hidden(cmd, f"batch_export_{accounts_file.stem}")
         self.status.set(
             f"正在处理 {accounts_file.name}: 待导出 {len(pending)}，跳过 {len(existing)}"
         )

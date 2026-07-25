@@ -74,7 +74,7 @@ ROOT = Path(__file__).resolve().parent
 INJECT_DIR = ROOT / "inject"
 DEFAULT_OUT = ROOT.parent / "cli" / "downloads" / "inject"
 DEFAULT_URL = "https://www.dola.com/chat"
-DEFAULT_COOKIE_POOL = DEFAULT_COOKIE_DIR
+DEFAULT_COOKIE_POOL = Path(os.environ.get("DOLA_ACCOUNT_POOL") or DEFAULT_COOKIE_DIR)
 
 SCRIPT_ORDER = (
     "bridge.js",
@@ -198,6 +198,11 @@ class HostApi:
         return {"ok": True}
 
     def _maybe_spend_video_credit(self, duration: int | None, reason: str) -> None:
+        # Durable job workers reserve/commit credits transactionally in SQLite.
+        # Do not also charge the legacy JSON ledger for the same submission.
+        if os.environ.get("DOLA_JOB_MANAGED") == "1":
+            log_debug("skip legacy credit spend: managed by durable job scheduler")
+            return
         if not self.account_id:
             return
         dur = int(duration or self.last_video_duration or 0)
@@ -1028,12 +1033,13 @@ def run_shell(
             result_box["result"] = result
             log_step("auto-DONE", f"file={result.get('file')} size={result.get('size')}")
             # Auto gen success → spend credits for this duration
-            try:
-                api.last_video_duration = int(duration)
-                api._spent_for_submit_at = 0  # force allow spend
-                api._maybe_spend_video_credit(int(duration), reason="auto-video")
-            except Exception as exc:
-                log_debug(f"auto credit spend: {exc}")
+            if os.environ.get("DOLA_JOB_MANAGED") != "1":
+                try:
+                    api.last_video_duration = int(duration)
+                    api._spent_for_submit_at = 0  # force allow spend
+                    api._maybe_spend_video_credit(int(duration), reason="auto-video")
+                except Exception as exc:
+                    log_debug(f"auto credit spend: {exc}")
             print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
             holder["auto_running"] = False
             if close_after:

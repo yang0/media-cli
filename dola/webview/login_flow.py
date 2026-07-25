@@ -11,6 +11,7 @@ Order of operations (important):
 from __future__ import annotations
 
 import re
+import random
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
@@ -20,7 +21,21 @@ LogFn = Callable[[str], None]
 
 # Allow Google's password input controller and validation animation to settle
 # before we click Next. This is intentionally longer than the email delay.
-PASSWORD_SUBMIT_DELAY = 1.8
+FIRST_PASSWORD_FIELD_DELAY = 3.0
+FIRST_PASSWORD_SUBMIT_DELAY = 4.0
+PASSWORD_SUBMIT_DELAY = 2.5
+
+
+def _human_pause(
+    log: Optional[LogFn],
+    label: str,
+    minimum: float,
+    maximum: float,
+) -> float:
+    delay = random.uniform(minimum, maximum)
+    _log(log, f"{label}: wait {delay:.1f}s")
+    time.sleep(delay)
+    return delay
 
 
 def _log(log: Optional[LogFn], msg: str) -> None:
@@ -140,12 +155,29 @@ def js_fill_email(email: str) -> str:
         /email|identifier|account/i.test([i.type, i.name, i.id, i.getAttribute('autocomplete') || ''].join(' '))
       );
   if (!el || !visible(el)) return {{ ok: false, reason: 'email-input-missing', url: location.href }};
-  el.focus();
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-  setter?.call(el, email);
-  el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-  el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-  return {{ ok: true, url: location.href }};
+  return new Promise(resolve => {{
+    el.focus();
+    setter?.call(el, '');
+    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+    let index = 0;
+    const typeNext = () => {{
+      index += 1;
+      setter?.call(el, email.slice(0, index));
+      el.dispatchEvent(new InputEvent('input', {{
+        bubbles: true,
+        data: email[index - 1] || '',
+        inputType: 'insertText',
+      }}));
+      if (index >= email.length) {{
+        el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+        resolve({{ ok: true, url: location.href, valLen: el.value.length }});
+        return;
+      }}
+      setTimeout(typeNext, 70 + Math.floor(Math.random() * 80));
+    }};
+    setTimeout(typeNext, 350 + Math.floor(Math.random() * 350));
+  }});
 }})()
 """
 
@@ -171,15 +203,35 @@ def js_fill_password(password: str) -> str:
   if (el.value === password) {{
     return {{ ok: true, alreadyFilled: true, url: location.href, vis: visible(el), valLen: el.value.length }};
   }}
-  el.focus();
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-  setter?.call(el, password);
-  el.value = password;
-  el.dispatchEvent(new InputEvent('beforeinput', {{ bubbles: true, data: password, inputType: 'insertText' }}));
-  el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-  el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-  el.dispatchEvent(new InputEvent('input', {{ bubbles: true, data: password, inputType: 'insertText' }}));
-  return {{ ok: true, alreadyFilled: false, url: location.href, vis: visible(el), valLen: (el.value || '').length }};
+  return new Promise(resolve => {{
+    el.focus();
+    setter?.call(el, '');
+    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+    let index = 0;
+    const typeNext = () => {{
+      index += 1;
+      setter?.call(el, password.slice(0, index));
+      el.dispatchEvent(new InputEvent('input', {{
+        bubbles: true,
+        data: password[index - 1] || '',
+        inputType: 'insertText',
+      }}));
+      if (index >= password.length) {{
+        el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+        resolve({{
+          ok: true,
+          alreadyFilled: false,
+          url: location.href,
+          vis: visible(el),
+          valLen: el.value.length,
+        }});
+        return;
+      }}
+      setTimeout(typeNext, 85 + Math.floor(Math.random() * 95));
+    }};
+    setTimeout(typeNext, 450 + Math.floor(Math.random() * 450));
+  }});
 }})()
 """
 
@@ -465,6 +517,7 @@ def run_google_login(
     pass_done = False
     password_submit_attempts = 0
     last_password_submit = 0.0
+    first_password_field_waited = False
 
     # Ensure on dola first
     try:
@@ -487,9 +540,10 @@ def run_google_login(
         if cookies_probe and cookies_probe():
             return LoginResult(True, "already-logged-in", "session cookies already present", st.get("url", ""))
 
+        _human_pause(log, "before Dola login click", 1.2, 2.2)
         r1 = js_eval(window, JS_CLICK_LOGIN)
         _log(log, f"click login: {r1}")
-        time.sleep(1.5)
+        _human_pause(log, "before Google login click", 1.4, 2.6)
         r2 = js_eval(window, JS_CLICK_GOOGLE)
         _log(log, f"click google: {r2}")
         time.sleep(2.5)
@@ -537,6 +591,7 @@ def run_google_login(
         # Do NOT load_url away while hash still has the OAuth token.
         if body_age:
             stage = "age-gate"
+            _human_pause(log, "before age confirmation", 1.6, 2.8)
             nr = js_eval(window, JS_CLICK_AGE_CONFIRM)
             _log(log, f"age-gate click: {nr}")
             age_clicks += 1
@@ -550,17 +605,19 @@ def run_google_login(
         if st.get("onDola") and not st.get("onGoogle") and not on_callback and not body_age:
             if st.get("hasLogin") or st.get("hasLoginBtn") or st.get("hasGoogleBtn"):
                 stage = "retry-dola-login"
+                _human_pause(log, "before retry login click", 1.0, 2.0)
                 js_eval(window, JS_CLICK_LOGIN)
-                time.sleep(1.2)
+                _human_pause(log, "before retry Google click", 1.3, 2.4)
                 js_eval(window, JS_CLICK_GOOGLE)
                 time.sleep(2)
                 continue
             # No login button visible: open login modal via common entry points / top-right
             if idle_ticks in (0, 3, 8) and not oauth_seen:
                 stage = "force-login-entry"
+                _human_pause(log, "before forced login click", 1.0, 2.0)
                 r1 = js_eval(window, JS_CLICK_LOGIN)
                 _log(log, f"force click login: {r1}")
-                time.sleep(1.2)
+                _human_pause(log, "before forced Google click", 1.3, 2.4)
                 r2 = js_eval(window, JS_CLICK_GOOGLE)
                 _log(log, f"force click google: {r2}")
                 time.sleep(2.5)
@@ -577,11 +634,12 @@ def run_google_login(
         if st.get("onGoogle") and st.get("emailStep") and not st.get("passStep"):
             stage = "fill-email"
             # Allow re-fill if page bounced back
+            _human_pause(log, "email form settle", 1.5, 2.8)
             fr = js_eval(window, js_fill_email(email))
             _log(log, f"fill email: {fr}")
             if isinstance(fr, dict) and fr.get("ok"):
                 email_done = True
-                time.sleep(0.4)
+                _human_pause(log, "after email typing", 1.4, 2.6)
                 nr = js_eval(window, JS_CLICK_NEXT)
                 _log(log, f"next after email: {nr}")
                 time.sleep(2.8)
@@ -606,13 +664,29 @@ def run_google_login(
                     url,
                     st,
                 )
+            if not first_password_field_waited:
+                wait_started = time.monotonic()
+                first_password_delay = random.uniform(
+                    FIRST_PASSWORD_FIELD_DELAY,
+                    FIRST_PASSWORD_FIELD_DELAY + 1.5,
+                )
+                _log(log, f"first password page: wait {first_password_delay:.1f}s before filling")
+                time.sleep(first_password_delay)
+                first_password_field_waited = True
+                _log(log, f"first password pre-fill wait actual={time.monotonic() - wait_started:.1f}s")
             # Wait a beat for password field animation
             time.sleep(0.8)
             fr = js_eval(window, js_fill_password(password))
             _log(log, f"fill password: ok={isinstance(fr, dict) and fr.get('ok')} alreadyFilled={isinstance(fr, dict) and fr.get('alreadyFilled')}")
             if isinstance(fr, dict) and fr.get("ok"):
                 pass_done = True
-                time.sleep(PASSWORD_SUBMIT_DELAY)
+                submit_delay = (
+                    random.uniform(FIRST_PASSWORD_SUBMIT_DELAY, FIRST_PASSWORD_SUBMIT_DELAY + 1.5)
+                    if password_submit_attempts == 0
+                    else random.uniform(PASSWORD_SUBMIT_DELAY, PASSWORD_SUBMIT_DELAY + 1.0)
+                )
+                _log(log, f"wait {submit_delay:.1f}s before password submit")
+                time.sleep(submit_delay)
                 nr = js_eval(window, JS_CLICK_NEXT)
                 _log(log, f"next after password: {nr}")
                 password_submit_attempts += 1
@@ -626,6 +700,7 @@ def run_google_login(
         # Workspace TOS / OAuth consent only (not email/password pages)
         if st.get("workspace") or st.get("consent"):
             stage = "google-intermediate"
+            _human_pause(log, "before consent/terms click", 1.7, 3.0)
             nr = js_eval(window, JS_CLICK_NEXT)
             _log(log, f"intermediate click: {nr}")
             time.sleep(2)
@@ -634,6 +709,7 @@ def run_google_login(
         # Other Google interstitial (not identifier/password forms)
         if st.get("onGoogle") and not st.get("emailStep") and not st.get("passStep"):
             stage = "google-intermediate"
+            _human_pause(log, "before Google intermediate click", 1.7, 3.0)
             nr = js_eval(window, JS_CLICK_NEXT)
             _log(log, f"intermediate click: {nr}")
             time.sleep(2)

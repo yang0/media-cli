@@ -7,6 +7,7 @@ Bun or Node CLI for Dola chat, image generation, video generation, attachments, 
 ```text
 src/
   cli.js                 # process entry
+  job-command.js         # durable video/jobs/pool/worker command bridge
   main.js                # orchestration / batch / account rotation
   args.js                # --help + argv parser
   config.js              # constants (CDP port, Seedance, paths)
@@ -32,17 +33,58 @@ src/
     patch.js             # /chat/completion 15s + seedance patch
     resolve.js           # get_play_info no-watermark resolve
   cli.monolith.backup.js # pre-split backup (reference only)
+webview/
+  job_store.py           # SQLite jobs, leases, credits, manifests
+  job_worker.py          # hidden concurrent WebView worker
+  recover_download.py    # recover an expired video URL by job metadata
 ```
 
 ```powershell
 cd dola\cli
 node src\cli.js --help
-node src\cli.js --new-chat --image-gen --prompt "A green circle icon" --out .\downloads
-node src\cli.js --video-gen --duration 5 --aspect-ratio 16:9 --prompt "A paper boat in rain" --out .\downloads
-node src\cli.js --video-gen --duration 15 --prompt "Cinematic drone shot" --out .\downloads
+
+# Async 15s generation; the first command returns a jobId immediately
+$job = node src\cli.js video submit `
+  --prompt "A paper boat sailing through rain" --duration 15 `
+  --aspect-ratio 9:16 --file E:\temp\avatar.webp `
+  --request-id demo-video-001 --json | ConvertFrom-Json
+node src\cli.js video wait $job.jobId --timeout 35m --json
+node src\cli.js video download $job.jobId --out E:\videos --json
+
+# Synchronous convenience command
+node src\cli.js video generate `
+  --prompt "A girl turns toward the camera" --duration 15 `
+  --file E:\temp\avatar.webp --wait --json
+
+# Inspect scheduler state
+node src\cli.js pool status --json
+node src\cli.js jobs list --limit 20 --json
+node src\cli.js worker status --json
 ```
 
 Start a logged-in Dola Chrome session with CDP port `9221`. The CLI uses the account pool at `G:\cookies\dola` by default; override it with `--account-pool` or `DOLA_ACCOUNT_POOL`. Use `--new-chat`, `--session`, `--file`, `--batch-prompt-file`, and `--resume` as needed.
+
+## Durable concurrent video jobs
+
+Video jobs use a SQLite queue, isolated WebView profiles, and a default global
+concurrency of three. One account/profile can only own one active job. The
+scheduler reserves the daily duration cost before opening WebView and commits it
+when submission is confirmed.
+
+```powershell
+dola video submit --prompt "A girl turns toward camera" --duration 15 `
+  --file E:\temp\avatar.webp --request-id demo-001 --json
+dola video status <jobId> --json
+dola video wait <jobId> --timeout 35m --json
+dola video download <jobId> --out E:\videos --json
+dola pool status
+```
+
+`dola video generate ...` is the blocking convenience form. Job artifacts are
+stored under `downloads/jobs/<date>/<jobId>/`, including the exact request,
+copied references, result metadata, log, video SHA-256, account, message ID and
+video ID. Existing simple `dola --video-gen ...` calls are routed through this
+durable path.
 
 ## Account pool
 

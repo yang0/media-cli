@@ -14,9 +14,11 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import os
 import re
 import time
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -25,6 +27,23 @@ from login_flow import js_eval
 LogFn = Callable[[str], None]
 ROOT = Path(__file__).resolve().parent
 PATCH_JS = (ROOT / "video_patch.js").read_text(encoding="utf-8")
+
+
+def _emit_job_event(event_type: str, **payload: Any) -> None:
+    """Emit scheduler events without coupling this flow to the job database."""
+    target = os.environ.get("DOLA_JOB_EVENT_FILE", "").strip()
+    if not target:
+        return
+    record = {
+        "type": event_type,
+        "jobId": os.environ.get("DOLA_JOB_ID", ""),
+        "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        **payload,
+    }
+    path = Path(target)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
 
 
 def _log(log: Optional[LogFn], msg: str) -> None:
@@ -198,17 +217,21 @@ JS_SEND_STATE = r"""
 
 JS_FIND_VIDEOS = r"""
 (() => {
-  const urls = new Set();
-  const push = u => {
+  const records = new Map();
+  const push = (u, messageId='', vid='') => {
     if (!u || typeof u !== 'string') return;
     if (!/^https?:\/\//i.test(u)) return;
-    if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(u) || /mime_type=video_|rc_gen_video|video_gen|play/i.test(u)) urls.add(u);
+    if (!(/\.(mp4|webm|mov|m4v)(\?|$)/i.test(u) || /mime_type=video_|rc_gen_video|video_gen|play/i.test(u))) return;
+    const key = [messageId || '', vid || '', u].join('|');
+    records.set(key, { url: u, messageId: String(messageId || ''), vid: String(vid || '') });
   };
   document.querySelectorAll('video, video source, a[href]').forEach(el => {
     push(el.currentSrc || el.src || el.href || el.getAttribute('src') || el.getAttribute('href') || '');
   });
   try { (window.__dolaCliImageRecords || []).forEach(r => push(r && r.url)); } catch (e) {}
-  try { (window.__dolaCliLastVideoUrls || []).forEach(push); } catch (e) {}
+  // Do not pass `push` directly to forEach: its index/array arguments would be
+  // misread as messageId/vid and could leak a signed URL into the vid field.
+  try { (window.__dolaCliLastVideoUrls || []).forEach(u => push(u)); } catch (e) {}
 
   // Reseller core: messageId → vid → get_play_info no-watermark URL
   try {
@@ -239,14 +262,14 @@ JS_FIND_VIDEOS = r"""
       if (vid && window.__dolaResolveVideoUrl) {
         try {
           const r = window.__dolaResolveVideoUrl(vid);
-          if (r && r.mainUrl) push(r.mainUrl);
+          if (r && r.mainUrl) push(r.mainUrl, mid, vid);
         } catch (e) {}
       } else if (vid && window.__dolaGetVideoUrl) {
-        push(window.__dolaGetVideoUrl(vid));
+        push(window.__dolaGetVideoUrl(vid), mid, vid);
       }
     });
   } catch (e) {}
-  return Array.from(urls).slice(0, 40);
+  return Array.from(records.values()).slice(0, 40);
 })()
 """
 
@@ -331,9 +354,16 @@ def download_url(url: str, out_path: Path, timeout: int = 180) -> Path:
             "Referer": "https://www.dola.com/",
         },
     )
+    part_path = out_path.with_suffix(out_path.suffix + ".part")
     with urllib.request.urlopen(req, timeout=timeout) as resp:
+        content_type = str(resp.headers.get("Content-Type") or "").lower()
+        if content_type and "video/" not in content_type and "octet-stream" not in content_type:
+            raise RuntimeError(f"unexpected video content type: {content_type}")
         data = resp.read()
-    out_path.write_bytes(data)
+    if len(data) < 1024:
+        raise RuntimeError(f"downloaded video is unexpectedly small: {len(data)} bytes")
+    part_path.write_bytes(data)
+    os.replace(part_path, out_path)
     return out_path
 
 
@@ -507,8 +537,20 @@ def run_video_generation(
         raise RuntimeError(f"fill prompt failed: {r3}")
     time.sleep(0.8)
 
+    # Snapshot existing videos immediately before submission. A job may run in a
+    # profile containing old conversations, so "latest video on page" is not a
+    # safe job-to-result association.
+    before_records = js_eval(window, JS_FIND_VIDEOS) or []
+    before_keys = {
+        f"{item.get('messageId', '')}|{item.get('vid', '')}|{item.get('url', '')}"
+        for item in before_records
+        if isinstance(item, dict)
+    }
+    _log(log, f"video baseline records={len(before_keys)}")
+
     # Step 4: submit
     _log(log, ">>> step4: submit")
+    submitted = False
     for attempt in range(1, 10):
         st = js_eval(window, JS_SEND_STATE) or {}
         _log(log, f"send-state: {st}")
@@ -519,6 +561,12 @@ def run_video_generation(
         _log(log, f"send-state after click: {st2}")
         if isinstance(st2, dict) and int(st2.get("promptLen") or 0) < max(8, len(prompt) // 3):
             _log(log, "composer cleared — submit accepted")
+            submitted = True
+            try:
+                session_url = str(window.get_current_url() or "")
+            except Exception:
+                session_url = ""
+            _emit_job_event("submitted", sessionUrl=session_url)
             break
         time.sleep(1.0)
     else:
@@ -528,21 +576,33 @@ def run_video_generation(
     _log(log, f">>> step5: wait for video + download (timeout={timeout}s)")
     deadline = time.time() + timeout
     best_url = ""
+    best_record: dict[str, Any] = {}
     poll = 0
     while time.time() < deadline:
         poll += 1
         remaining = deadline - time.time()
         try:
-            urls = js_eval(window, JS_FIND_VIDEOS) or []
+            records = js_eval(window, JS_FIND_VIDEOS) or []
         except Exception as exc:
             _log(log, f"find-videos poll[{poll}] err: {exc}")
             time.sleep(3.0)
             continue
-        if isinstance(urls, list) and urls:
-            best_url = prefer_video_url([str(u) for u in urls])
-            _log(log, f"found {len(urls)} video url(s) poll={poll}; prefer={best_url[:160]}")
-            for j, u in enumerate(urls[:8]):
-                _log(log, f"  url[{j}]={str(u)[:180]}")
+        fresh_records = []
+        if isinstance(records, list):
+            for item in records:
+                if not isinstance(item, dict) or not item.get("url"):
+                    continue
+                key = f"{item.get('messageId', '')}|{item.get('vid', '')}|{item.get('url', '')}"
+                if key not in before_keys:
+                    fresh_records.append(item)
+        if fresh_records:
+            best_url = prefer_video_url([str(item["url"]) for item in fresh_records])
+            best_record = next((item for item in fresh_records if item.get("url") == best_url), fresh_records[0])
+            _log(
+                log,
+                f"found {len(fresh_records)} new video record(s) poll={poll}; "
+                f"messageId={best_record.get('messageId') or '-'} vid={best_record.get('vid') or '-'}",
+            )
             if best_url:
                 break
         elif poll % 5 == 0:
@@ -551,6 +611,18 @@ def run_video_generation(
 
     if not best_url:
         raise TimeoutError(f"no video URL within {timeout}s (polls={poll})")
+
+    try:
+        generated_session_url = str(window.get_current_url() or "")
+    except Exception:
+        generated_session_url = ""
+    _emit_job_event(
+        "generated",
+        url=best_url,
+        sessionUrl=generated_session_url,
+        messageId=str(best_record.get("messageId") or ""),
+        vid=str(best_record.get("vid") or ""),
+    )
 
     ext = "mp4"
     if ".webm" in best_url.lower():
@@ -577,6 +649,9 @@ def run_video_generation(
         "ok": True,
         "file": str(out_path),
         "url": best_url,
+        "sessionUrl": str(window.get_current_url() or ""),
+        "messageId": str(best_record.get("messageId") or ""),
+        "vid": str(best_record.get("vid") or ""),
         "duration": duration,
         "aspectRatio": ratio,
         "model": model,
@@ -584,5 +659,6 @@ def run_video_generation(
         "size": size,
         "elapsedSec": round(time.time() - t_all, 1),
     }
+    _emit_job_event("result", **result)
     _log(log, f">>> video_flow DONE elapsed={result['elapsedSec']}s file={out_path}")
     return result

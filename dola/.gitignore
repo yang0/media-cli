@@ -10,3 +10,5 @@ webview/daily_profile_usage.lock
 # Local WebView profiles and logs
 webview/profiles/
 webview/logs/
+cli/.dola/
+cli/downloads/jobs/
