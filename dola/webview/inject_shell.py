@@ -33,8 +33,23 @@ from urllib.parse import unquote, urlparse
 
 import webview
 
-from cookie_util import filter_dola_related, has_session, load_cookies_from_webview2_profile
-from daily_profile_usage import mark_profile_used, reserve_unused_profile, usage_snapshot
+from cookie_util import (
+    DEFAULT_COOKIE_DIR,
+    apply_cookies_to_webview_window,
+    expand_cookies,
+    filter_dola_related,
+    find_account_cookie_file,
+    has_session,
+    load_account_netscape_cookies,
+    load_cookies_from_webview2_profile,
+)
+from daily_profile_usage import (
+    DAILY_CREDIT_LIMIT,
+    credit_cost_for_duration,
+    get_balance,
+    mark_profile_used,
+    spend_for_duration,
+)
 from debug_log import (
     get_log_path,
     log,
@@ -53,12 +68,13 @@ from dola_webview import (
     profile_dir,
     safe_account_id,
 )
-from login_flow import parse_accounts_file
+from login_flow import page_state, parse_accounts_file
 
 ROOT = Path(__file__).resolve().parent
 INJECT_DIR = ROOT / "inject"
 DEFAULT_OUT = ROOT.parent / "cli" / "downloads" / "inject"
 DEFAULT_URL = "https://www.dola.com/chat"
+DEFAULT_COOKIE_POOL = DEFAULT_COOKIE_DIR
 
 SCRIPT_ORDER = (
     "bridge.js",
@@ -105,14 +121,26 @@ def guess_ext(url: str, content_type: str = "") -> str:
 
 
 class HostApi:
-    """JS → Python bridge for download / logging."""
+    """JS → Python bridge for download / logging / credit tracking."""
 
-    def __init__(self, out_dir: Path):
+    def __init__(
+        self,
+        out_dir: Path,
+        *,
+        account_id: str = "",
+        on_title_update=None,
+        on_credit_change=None,
+    ):
         self.out_dir = out_dir
         self.out_dir.mkdir(parents=True, exist_ok=True)
+        self.account_id = account_id
+        self.on_title_update = on_title_update
+        self.on_credit_change = on_credit_change
         self._lock = threading.Lock()
         self.downloads: list[dict] = []
         self.message_count = 0
+        self.last_video_duration: int | None = None
+        self._spent_for_submit_at: float = 0.0
 
     def on_message(self, payload):
         """Called from bridge.js with JSON string or dict-like."""
@@ -138,6 +166,16 @@ class HostApi:
             (level_map.get(msg_type) or log)(f"js[{msg_type}]: {text}")
             return {"ok": True}
 
+        if msg_type == "videoSubmit":
+            try:
+                dur = int(data.get("duration") or 0)
+            except (TypeError, ValueError):
+                dur = 0
+            if dur in (5, 10, 15):
+                self.last_video_duration = dur
+                log(f"videoSubmit duration={dur}s cost={credit_cost_for_duration(dur)} patched={data.get('patched')}")
+            return {"ok": True, "duration": dur}
+
         if msg_type == "download":
             return self._handle_download(data)
 
@@ -158,6 +196,36 @@ class HostApi:
 
         log(f"host#{n} message: {msg_type} {json.dumps(data, ensure_ascii=False)[:240]}")
         return {"ok": True}
+
+    def _maybe_spend_video_credit(self, duration: int | None, reason: str) -> None:
+        if not self.account_id:
+            return
+        dur = int(duration or self.last_video_duration or 0)
+        if dur not in (5, 10, 15):
+            # Prefer last submit; fall back to 15 only if unknown after a video result
+            dur = self.last_video_duration or 15
+        # Debounce: one spend per ~20s window (avoid multi-download same gen)
+        now = time.time()
+        if now - self._spent_for_submit_at < 20:
+            log_debug(f"credit skip debounce account={self.account_id} dur={dur}")
+            return
+        try:
+            bal = spend_for_duration(self.account_id, dur, reason=reason)
+            self._spent_for_submit_at = now
+            log(
+                f"积分消耗 account={self.account_id} duration={dur}s cost={bal.get('cost')} "
+                f"remaining={bal.get('remaining')}/{bal.get('limit')}"
+            )
+            if callable(self.on_credit_change):
+                self.on_credit_change(bal)
+            if callable(self.on_title_update):
+                self.on_title_update()
+        except ValueError as exc:
+            log_warn(str(exc))
+            if callable(self.on_title_update):
+                self.on_title_update()
+        except Exception as exc:
+            log_exc("credit spend failed", exc)
 
     def _handle_download(self, data: dict) -> dict:
         url = data.get("url") or ""
@@ -208,6 +276,21 @@ class HostApi:
                 f"{out_path} bytes={len(body)} ctype={ctype!r} status={status} "
                 f"elapsed={time.time() - t0:.1f}s",
             )
+            # Spend daily video credits when a video file is saved
+            rtype = str(data.get("type") or "").lower()
+            is_video = rtype == "video" or out_path.suffix.lower() in {
+                ".mp4",
+                ".webm",
+                ".mov",
+                ".m4v",
+            }
+            if is_video:
+                dur = data.get("duration")
+                try:
+                    dur_i = int(dur) if dur is not None else None
+                except (TypeError, ValueError):
+                    dur_i = None
+                self._maybe_spend_video_credit(dur_i, reason="video-download")
             return {"ok": True, "file": str(out_path), "bytes": len(body)}
         except Exception as exc:
             log_exc(f"download failed url={url[:120]}", exc)
@@ -216,6 +299,16 @@ class HostApi:
     def ping(self) -> str:
         log_debug("host api ping")
         return "pong"
+
+
+def window_title_for(account_id: str) -> str:
+    try:
+        bal = get_balance(account_id)
+        rem = int(bal.get("remaining") or 0)
+        lim = int(bal.get("limit") or DAILY_CREDIT_LIMIT)
+        return f"Dola 注入壳 — {account_id}  ·  积分 {rem}/{lim}"
+    except Exception:
+        return f"Dola 注入壳 — {account_id}  ·  积分 ?/{DAILY_CREDIT_LIMIT}"
 
 
 def _is_error_page(href: str) -> bool:
@@ -446,12 +539,16 @@ def run_shell(
     model: str = "",
     timeout: float = 600,
     close_after: bool = False,
+    cookie_test: bool = False,
 ) -> int:
     account_id = safe_account_id(account_id)
     storage = profile_dir(account_id, profiles_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    log_step("run_shell", f"account={account_id} auto={auto} close_after={close_after}")
+    log_step(
+        "run_shell",
+        f"account={account_id} auto={auto} close_after={close_after} cookie_test={cookie_test}",
+    )
     log(f"account={account_id}")
     log(f"storage={storage}")
     log(f"url={url}")
@@ -470,6 +567,8 @@ def run_shell(
         log_exc("load_inject_scripts failed", exc)
         raise
 
+    pending_cookie_import: list[dict] = []
+    cookie_file_used: Path | None = None
     try:
         ck = load_cookies_from_webview2_profile(storage)
         related = filter_dola_related(ck) or ck
@@ -483,16 +582,37 @@ def run_shell(
         if require_session:
             raise
 
+    # Profile never opened before → no WebView session, but G:\cookies\dola may have Netscape export.
+    # Import those cookies into WebView2 after the window starts (fixes "open then flash-close").
+    # Refresh from the account cookie file whenever it exists. A profile DB can
+    # contain stale session rows that WebView2 drops as soon as Dola loads.
+    if not sess or find_account_cookie_file(account_id, DEFAULT_COOKIE_POOL):
+        cookie_file_used = find_account_cookie_file(account_id, DEFAULT_COOKIE_POOL)
+        file_ck = load_account_netscape_cookies(account_id, DEFAULT_COOKIE_POOL)
+        file_rel = filter_dola_related(file_ck) or file_ck
+        file_sess = has_session(file_rel)
+        log(
+            f"netscape cookie file={cookie_file_used} "
+            f"count={len(file_ck)} session={'yes' if file_sess else 'NO'}"
+        )
+        if file_sess:
+            pending_cookie_import = list(file_rel or file_ck)
+            sess = True
+            log(f"will refresh {len(pending_cookie_import)} cookies from file into WebView profile")
+        elif file_ck:
+            log_warn("cookie file exists but has no sessionid/sid_* — may need re-login/export")
+
     log("inject scripts: " + ", ".join(n for n, _ in scripts))
     if require_session and not sess:
         msg = (
-            f"profile has no session: {storage}\n"
-            "先用 login_one.cmd / dola_webview.py 登录并导出 cookie，再开注入壳。"
+            f"账号 {account_id} 没有可用登录态。\n"
+            f"  WebView profile: {storage}\n"
+            f"  Cookie 文件: {cookie_file_used or (DEFAULT_COOKIE_POOL / f'dola_{account_id}.txt')}\n"
+            "请先用「打开 WebView 登录」登录并导出 cookie，或把有效的 dola_<账号>.txt 放到 G:\\cookies\\dola。"
         )
         log_error(msg)
         raise SystemExit(msg)
 
-    api = HostApi(out_dir)
     # IMPORTANT: never call window.evaluate_js from threading.Timer — it crashes WebView2
     # and the window appears to "open then instantly close".
     inject_lock = threading.Lock()
@@ -505,7 +625,42 @@ def run_shell(
         "loaded_count": 0,
         "started_at": time.time(),
         "injecting": False,
+        "cookie_import": list(pending_cookie_import),
     }
+
+    def update_window_title() -> None:
+        w = holder.get("window")
+        title = window_title_for(account_id)
+        if not w:
+            return
+        try:
+            # pywebview Window.set_title if available
+            if hasattr(w, "set_title"):
+                w.set_title(title)
+            else:
+                w.title = title  # type: ignore[attr-defined]
+        except Exception as exc:
+            log_debug(f"set_title failed: {exc}")
+
+    def on_credit_change(bal: dict) -> None:
+        log(
+            f"积分变更 account={account_id} remaining={bal.get('remaining')}/{bal.get('limit')} "
+            f"spent={bal.get('spent')}"
+        )
+        update_window_title()
+
+    try:
+        mark_profile_used(account_id, reason="inject-shell")
+    except Exception as exc:
+        log_debug(f"mark_profile_used: {exc}")
+
+    api = HostApi(
+        out_dir,
+        account_id=account_id,
+        on_title_update=update_window_title,
+        on_credit_change=on_credit_change,
+    )
+    log(f"今日积分: {window_title_for(account_id)}")
 
     def recover_if_error_page(w, reason: str = "") -> bool:
         """If renderer crashed to Edge error page, reload /chat. Returns True if recovered."""
@@ -621,6 +776,61 @@ def run_shell(
         except Exception as exc:
             log_debug(f"get_current_url: {exc}")
 
+        # Import Netscape cookies into this (possibly fresh) WebView2 profile
+        import_list = list(holder.get("cookie_import") or [])
+        if import_list:
+            log_step("cookie-import", f"count={len(import_list)}")
+            try:
+                n = apply_cookies_to_webview_window(w, import_list, navigate_url=url)
+                log(f"cookie-import applied={n}; navigation issued on UI thread")
+                holder["cookie_import"] = []
+                # Wait for page after navigation
+                ready = False
+                for i in range(50):
+                    time.sleep(0.5)
+                    try:
+                        st = w.evaluate_js(
+                            "(() => ({ href: location.href, ready: document.readyState, "
+                            "hasBody: !!document.body, title: document.title||'' }))()"
+                        )
+                        if isinstance(st, dict) and st.get("hasBody") and "dola.com" in str(st.get("href") or ""):
+                            if st.get("ready") in ("interactive", "complete") or i >= 4:
+                                log(f"post-import ready i={i}: {st}")
+                                ready = True
+                                break
+                    except Exception as exc:
+                        if i % 5 == 0:
+                            log_debug(f"post-import warm {i}: {exc}")
+                if not ready:
+                    log_warn("post-import page wait incomplete; continue to inject anyway")
+                time.sleep(1.0)
+                live_cookies = expand_cookies(w.get_cookies() or [])
+                live_related = filter_dola_related(live_cookies) or live_cookies
+                live_session = has_session(live_related)
+                live_names = sorted(
+                    {c.get("name") or c.get("Name") or "?" for c in live_related}
+                )[:40]
+                log(
+                    f"post-import session={'yes' if live_session else 'NO'} "
+                    f"total_ck={len(live_cookies)} dola_ck={len(live_related)}"
+                )
+                log_debug(f"post-import cookie names sample: {live_names}")
+                if require_session and not live_session:
+                    raise RuntimeError("cookie import completed but no live Dola session cookie was found")
+            except Exception as exc:
+                log_exc("cookie-import FAILED", exc)
+                if require_session:
+                    result_box["error"] = f"cookie import failed: {exc}"
+                    log_error(
+                        "无法把 G:\\cookies\\dola 的 cookie 写入 WebView；"
+                        "请改用「打开 WebView 登录」先登录一次。"
+                    )
+                    try:
+                        w.destroy()
+                    except Exception:
+                        pass
+                    return
+
         # clear race pending from first loaded event
         holder["pending_inject"] = False
         time.sleep(0.8)
@@ -656,6 +866,71 @@ def run_shell(
                     drain_js_queue(w, api)
         except Exception as exc:
             log_exc("post-inject page check failed", exc)
+
+        auth_state = page_state(w)
+        if auth_state.get("hasLogin") and not auth_state.get("looksIn"):
+            log_error(
+                f"account={account_id} cookie rejected by Dola UI; "
+                f"page still shows Log In; source={cookie_file_used}"
+            )
+            try:
+                notice = json.dumps(
+                    f"账号 {account_id} 的 Cookie 已失效或被 Dola 拒绝。"
+                    "请返回启动器，使用“打开 WebView 登录”重新登录并导出 Cookie。",
+                    ensure_ascii=False,
+                )
+                w.evaluate_js(
+                    "(() => {"
+                    "let el=document.getElementById('__dola_cookie_invalid');"
+                    "if(!el){el=document.createElement('div');"
+                    "el.id='__dola_cookie_invalid';document.body.appendChild(el);}"
+                    f"el.textContent={notice};"
+                    "Object.assign(el.style,{position:'fixed',left:'16px',right:'16px',top:'16px',"
+                    "zIndex:'2147483647',padding:'12px 16px',borderRadius:'10px',"
+                    "background:'#b42318',color:'#fff',fontSize:'15px',fontWeight:'600',"
+                    "boxShadow:'0 8px 30px rgba(0,0,0,.28)',textAlign:'center'});"
+                    "return true;})()"
+                )
+            except Exception as exc:
+                log_debug(f"invalid-cookie notice failed: {exc}")
+
+        if cookie_test:
+            try:
+                live_cookies = expand_cookies(w.get_cookies() or [])
+                live_related = filter_dola_related(live_cookies) or live_cookies
+                live_session = has_session(live_related)
+                ui_state = page_state(w)
+                ui_logged_in = bool(ui_state.get("looksIn")) and not bool(ui_state.get("hasLogin"))
+                log(f"COOKIE_TEST page_state={ui_state}")
+                log(
+                    f"COOKIE_TEST account={account_id} "
+                    f"cookies={'PASS' if live_session else 'FAIL'} "
+                    f"ui={'PASS' if ui_logged_in else 'FAIL'} "
+                    f"inject={'PASS' if ok_inject else 'FAIL'} "
+                    f"total_ck={len(live_cookies)} dola_ck={len(live_related)}"
+                )
+                if require_session and not live_session:
+                    raise RuntimeError("no live Dola session cookie")
+                if require_session and not ui_logged_in:
+                    raise RuntimeError("Dola rejected the session: the page still shows Log In")
+                if not ok_inject:
+                    raise RuntimeError("page script injection failed")
+                result_box["result"] = {
+                    "account": account_id,
+                    "session": bool(live_session),
+                    "uiLoggedIn": bool(ui_logged_in),
+                    "injected": bool(ok_inject),
+                    "cookies": len(live_related),
+                }
+            except Exception as exc:
+                result_box["error"] = f"cookie test failed: {exc}"
+                log_exc("COOKIE_TEST FAILED", exc)
+            finally:
+                try:
+                    w.destroy()
+                except Exception as exc:
+                    log_debug(f"cookie-test destroy: {exc}")
+            return
 
         if not auto:
             log("就绪：窗口会一直开着，请手动操作。")
@@ -752,6 +1027,13 @@ def run_shell(
             )
             result_box["result"] = result
             log_step("auto-DONE", f"file={result.get('file')} size={result.get('size')}")
+            # Auto gen success → spend credits for this duration
+            try:
+                api.last_video_duration = int(duration)
+                api._spent_for_submit_at = 0  # force allow spend
+                api._maybe_spend_video_credit(int(duration), reason="auto-video")
+            except Exception as exc:
+                log_debug(f"auto credit spend: {exc}")
             print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
             holder["auto_running"] = False
             if close_after:
@@ -826,10 +1108,103 @@ def run_shell(
         else:
             log_warn("log file not found")
 
-    log_step("create_window", f"title=Dola注入壳 storage={storage}")
+    def menu_refresh():
+        w = holder.get("window")
+        log_step("menu", "刷新页面")
+        if not w:
+            return
+        try:
+            cur = ""
+            try:
+                cur = w.get_current_url() or ""
+            except Exception:
+                pass
+            target = cur if (cur and "dola.com" in cur and not _is_error_page(cur)) else DEFAULT_URL
+            w.load_url(target)
+            holder["pending_inject"] = True
+        except Exception as exc:
+            log_exc("refresh failed", exc)
+
+    def menu_show_credits():
+        try:
+            bal = get_balance(account_id)
+            msg = (
+                f"账号: {account_id}\n"
+                f"今日剩余积分: {bal.get('remaining')}/{bal.get('limit')}\n"
+                f"已用: {bal.get('spent')}\n"
+                f"计费: 5s=1 / 10s=2 / 15s=3（每日上限 {DAILY_CREDIT_LIMIT}）"
+            )
+            log(msg.replace("\n", " | "))
+            print(msg, flush=True)
+            update_window_title()
+        except Exception as exc:
+            log_exc("show credits failed", exc)
+
+    def _open_profile_process(target_account: str) -> None:
+        """Open another independent inject shell for a different profile."""
+        target_account = safe_account_id(target_account)
+        if target_account == account_id:
+            log("already this account")
+            return
+        py = sys.executable
+        cmd = [
+            py,
+            "-u",
+            str(Path(__file__).resolve()),
+            "--account",
+            target_account,
+            "--profiles",
+            str(profiles_dir),
+            "--out",
+            str(out_dir),
+            "--url",
+            DEFAULT_URL,
+            "--log-dir",
+            str(get_log_path().parent if get_log_path() else ROOT / "logs"),
+        ]
+        log_step("open-profile", f"{target_account} cmd={' '.join(cmd)}")
+        try:
+            subprocess.Popen(cmd, cwd=str(ROOT))
+        except Exception as exc:
+            log_exc(f"open profile {target_account} failed", exc)
+
+    def _make_account_menu_actions() -> list:
+        actions = []
+        try:
+            # show all profiles with session
+            for name in list_accounts(profiles_dir):
+                try:
+                    ck = load_cookies_from_webview2_profile(profile_dir(name, profiles_dir))
+                    if not has_session(filter_dola_related(ck) or ck):
+                        continue
+                except Exception:
+                    continue
+                try:
+                    bal = get_balance(name)
+                    rem = int(bal.get("remaining") or 0)
+                    lim = int(bal.get("limit") or DAILY_CREDIT_LIMIT)
+                    label = f"{name}  积分 {rem}/{lim}"
+                except Exception:
+                    label = f"{name}  积分 ?/{DAILY_CREDIT_LIMIT}"
+                if name == account_id:
+                    label = f"● {label}  (当前)"
+                    actions.append(webview.menu.MenuAction(label, menu_show_credits))
+                else:
+                    # bind name correctly in closure
+                    def _open(n=name):
+                        _open_profile_process(n)
+
+                    actions.append(webview.menu.MenuAction(label, _open))
+        except Exception as exc:
+            log_warn(f"account menu build failed: {exc}")
+        if not actions:
+            actions.append(webview.menu.MenuAction("(无可用账号)", lambda: None))
+        return actions
+
+    log_step("create_window", f"title={window_title_for(account_id)} storage={storage}")
     try:
         window = webview.create_window(
-            title=f"Dola 注入壳 — {account_id}",
+            title=window_title_for(account_id),
             url=url,
             width=1360,
             height=900,
@@ -837,7 +1212,7 @@ def run_shell(
             # Manual mode protects against accidental close. In auto mode this
             # would also intercept programmatic destroy() with a confirmation
             # dialog, leaving the Python/WebView2 processes alive after success.
-            confirm_close=not auto,
+            confirm_close=not (auto or cookie_test),
             js_api=api,
         )
     except Exception as exc:
@@ -873,12 +1248,15 @@ def run_shell(
         webview.menu.Menu(
             "Dola注入",
             [
+                webview.menu.MenuAction("刷新页面", menu_refresh),
                 webview.menu.MenuAction("重新注入脚本", menu_reinject),
                 webview.menu.MenuAction("打开下载目录", menu_open_out),
                 webview.menu.MenuAction("打开日志文件", menu_show_log),
                 webview.menu.MenuAction("回到 /chat", menu_home),
+                webview.menu.MenuAction("查看今日积分", menu_show_credits),
             ],
-        )
+        ),
+        webview.menu.Menu("账号", _make_account_menu_actions()),
     ]
 
     log_step("webview.start", "gui=edgechromium private_mode=False")
@@ -911,10 +1289,10 @@ def run_shell(
     if api.downloads:
         print(json.dumps({"downloads": api.downloads}, ensure_ascii=False, indent=2))
         log(f"downloads detail: {json.dumps(api.downloads, ensure_ascii=False)}")
-    if auto and result_box.get("error"):
+    if (auto or cookie_test) and result_box.get("error"):
         log_error(f"exit code 1: {result_box['error']}")
         return 1
-    if auto and not result_box.get("result"):
+    if (auto or cookie_test) and not result_box.get("result"):
         log_error("exit code 2: no result (window closed early?)")
         return 2
     log("exit code 0")
@@ -960,6 +1338,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--model", default="")
     p.add_argument("--timeout", type=float, default=600)
     p.add_argument("--close", action="store_true", help="Close window after --auto finishes")
+    p.add_argument(
+        "--cookie-test",
+        action="store_true",
+        help="Import/verify the account session cookie, then close without generating anything",
+    )
     p.add_argument("--log-dir", default=str(log_dir), help="Directory for detailed log files")
     args = p.parse_args(argv)
 
@@ -967,6 +1350,8 @@ def main(argv: list[str] | None = None) -> int:
 
     profiles = Path(args.profiles)
     if args.list:
+        print(f"# 视频积分: 每号每天 {DAILY_CREDIT_LIMIT}（5s=1 / 10s=2 / 15s=3）")
+        print(f"# {'账号':<22}  {'积分(剩/总)':<12}  session  path")
         for name in list_accounts(profiles):
             storage = profile_dir(name, profiles)
             try:
@@ -975,7 +1360,12 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:
                 sess = False
                 log_debug(f"list {name}: cookie err {exc}")
-            line = f"{name}\tsession={'yes' if sess else 'no'}\t{storage}"
+            try:
+                bal = get_balance(name)
+                credit = f"{bal.get('remaining')}/{bal.get('limit')}"
+            except Exception:
+                credit = f"?/{DAILY_CREDIT_LIMIT}"
+            line = f"{name:<22}  {credit:<12}  session={'yes' if sess else 'no'}  {storage}"
             print(line)
             log(line)
         return 0
@@ -1027,6 +1417,7 @@ def main(argv: list[str] | None = None) -> int:
             model=args.model or "",
             timeout=float(args.timeout),
             close_after=bool(args.close),
+            cookie_test=bool(args.cookie_test),
         )
     except SystemExit:
         raise

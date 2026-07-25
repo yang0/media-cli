@@ -10,11 +10,10 @@ import json
 import shutil
 import sqlite3
 import tempfile
+import threading
 import time
 from pathlib import Path
-from typing import Any, Iterable, List, Mapping
-
-
+from typing import Any, Iterable, List, Mapping  # Any used by apply_cookies_to_webview_window
 def _cookie_attr(cookie: Any, *names: str, default: Any = None) -> Any:
     if isinstance(cookie, Mapping):
         for name in names:
@@ -460,3 +459,143 @@ def parse_netscape(path: str | Path) -> List[dict]:
             }
         )
     return out
+
+
+DEFAULT_COOKIE_DIR = Path(r"G:\cookies\dola")
+
+
+def find_account_cookie_file(account_id: str, cookie_dir: str | Path | None = None) -> Path | None:
+    """Locate G:\\cookies\\dola\\dola_<account>.txt (or bare <account>.txt)."""
+    account_id = (account_id or "").strip()
+    if not account_id:
+        return None
+    base = Path(cookie_dir) if cookie_dir else DEFAULT_COOKIE_DIR
+    if not base.is_dir():
+        return None
+    candidates = [
+        base / f"dola_{account_id}.txt",
+        base / f"dola-{account_id}.txt",
+        base / f"{account_id}.txt",
+    ]
+    for p in candidates:
+        try:
+            if p.is_file() and p.stat().st_size > 0:
+                return p
+        except OSError:
+            continue
+    return None
+
+
+def load_account_netscape_cookies(
+    account_id: str, cookie_dir: str | Path | None = None
+) -> List[dict]:
+    path = find_account_cookie_file(account_id, cookie_dir)
+    if not path:
+        return []
+    return parse_netscape(path)
+
+
+def apply_cookies_to_webview_window(
+    window: Any,
+    cookies: Iterable[dict],
+    *,
+    navigate_url: str | None = None,
+) -> int:
+    """
+    Inject Netscape-style cookies into a running pywebview Edge WebView2 window.
+    Uses CoreWebView2.CookieManager.AddOrUpdateCookie (supports HttpOnly).
+    When navigate_url is provided, navigation happens in the same UI-thread call.
+
+    MUST run CookieManager on the WinForms UI thread — pywebview's after_start
+    callback is a worker thread, so we marshal via control.Invoke.
+    """
+    cookies_list = [c for c in (cookies or []) if c and c.get("name") and c.get("domain")]
+    if not cookies_list:
+        return 0
+
+    # pywebview: window.native is BrowserView; .browser is EdgeChrome; .webview is WebView2 control
+    native = getattr(window, "native", None)
+    browser = getattr(native, "browser", None) if native is not None else None
+    control = getattr(browser, "webview", None) if browser is not None else None
+    if control is None:
+        control = getattr(native, "webview", None) if native is not None else None
+    if control is None:
+        raise RuntimeError("WebView2 control not available on window.native (is gui=edgechromium?)")
+
+    box: dict[str, Any] = {"applied": 0, "errors": 0, "exc": None}
+
+    def _apply_on_ui() -> None:
+        try:
+            core = getattr(control, "CoreWebView2", None)
+            if core is None:
+                raise RuntimeError("CoreWebView2 not ready yet")
+            manager = core.CookieManager
+            try:
+                from System import DateTime, DateTimeKind  # type: ignore
+            except Exception:
+                DateTime = None  # type: ignore
+                DateTimeKind = None  # type: ignore
+
+            for c in cookies_list:
+                try:
+                    name = str(c.get("name") or "")
+                    value = str(c.get("value") if c.get("value") is not None else "")
+                    domain = str(c.get("domain") or "").strip()
+                    path = str(c.get("path") or "/") or "/"
+                    if not name or not domain:
+                        continue
+                    cookie = manager.CreateCookie(name, value, domain, path)
+                    cookie.IsHttpOnly = bool(c.get("httpOnly") or c.get("httponly"))
+                    cookie.IsSecure = bool(c.get("secure"))
+                    exp = int(c.get("expires") or 0)
+                    if exp > 0 and DateTime is not None:
+                        cookie.Expires = DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(
+                            float(exp)
+                        )
+                    manager.AddOrUpdateCookie(cookie)
+                    box["applied"] = int(box["applied"]) + 1
+                except Exception:
+                    box["errors"] = int(box["errors"]) + 1
+            if navigate_url:
+                core.Navigate(str(navigate_url))
+        except Exception as exc:
+            box["exc"] = exc
+
+    # Marshal onto UI thread when needed
+    try:
+        from System import Action  # type: ignore
+
+        need_invoke = bool(getattr(control, "InvokeRequired", False))
+        if need_invoke and hasattr(control, "Invoke"):
+            control.Invoke(Action(_apply_on_ui))
+        elif hasattr(control, "BeginInvoke") and need_invoke:
+            # fallback: sync wait via event
+            done = threading.Event()
+
+            def _wrap() -> None:
+                try:
+                    _apply_on_ui()
+                finally:
+                    done.set()
+
+            control.BeginInvoke(Action(_wrap))
+            if not done.wait(15):
+                raise TimeoutError("cookie import UI invoke timeout")
+        else:
+            # already UI thread, or InvokeRequired unavailable — try direct
+            _apply_on_ui()
+    except Exception as exc:
+        # last resort direct (may still fail off-UI)
+        if box["exc"] is None and box["applied"] == 0:
+            try:
+                _apply_on_ui()
+            except Exception as exc2:
+                raise RuntimeError(f"cookie import failed: {exc2}") from exc2
+        elif box["exc"] is None:
+            raise RuntimeError(f"cookie import invoke failed: {exc}") from exc
+
+    if box["exc"] is not None:
+        raise RuntimeError(f"cookie import failed: {box['exc']}") from box["exc"]
+    if int(box["applied"]) == 0 and int(box["errors"]) > 0:
+        raise RuntimeError(f"failed to apply any cookies (errors={box['errors']})")
+    return int(box["applied"])

@@ -67,13 +67,63 @@
         return changed;
     }
 
+    function notifyVideoSubmit(duration, patched) {
+        try {
+            window.__dolaLastVideoDuration = duration || TARGET_DURATION;
+            var payload = {
+                type: 'videoSubmit',
+                duration: window.__dolaLastVideoDuration,
+                patched: !!patched,
+                at: Date.now()
+            };
+            if (typeof window.__dolaToHost === 'function') window.__dolaToHost(payload);
+            else if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+                // only if stub from bridge — native pywebview postMessage must not receive this
+            }
+        } catch (_) {}
+    }
+
+    function readDurationFromPayload(obj, depth) {
+        depth = depth || 0;
+        if (depth > 12 || obj == null || typeof obj !== 'object') return 0;
+        if (obj.chat_ability && Number(obj.chat_ability.ability_type) === 17) {
+            var ability = obj.chat_ability;
+            var param = ability.ability_param;
+            if (typeof param === 'string') {
+                try { param = JSON.parse(param); } catch (_) { param = null; }
+            }
+            if (param && typeof param === 'object' && param.duration != null) {
+                var d = Number(param.duration);
+                if (d === 5 || d === 10 || d === 15) return d;
+            }
+        }
+        if (Array.isArray(obj)) {
+            for (var i = 0; i < obj.length; i++) {
+                var r = readDurationFromPayload(obj[i], depth + 1);
+                if (r) return r;
+            }
+        } else {
+            var keys = Object.keys(obj);
+            for (var j = 0; j < keys.length; j++) {
+                var r2 = readDurationFromPayload(obj[keys[j]], depth + 1);
+                if (r2) return r2;
+            }
+        }
+        return 0;
+    }
+
     function patchBody(rawBody) {
         if (typeof rawBody !== 'string' || !rawBody.trim()) return { changed: false, body: rawBody };
         var payload;
         try { payload = JSON.parse(rawBody); } catch (_) { return { changed: false, body: rawBody }; }
+        var beforeDur = readDurationFromPayload(payload);
         if (patchDuration(payload)) {
+            var afterDur = readDurationFromPayload(payload) || TARGET_DURATION;
+            notifyVideoSubmit(afterDur, true);
             return { changed: true, body: JSON.stringify(payload) };
         }
+        // even without our patch, record native 5/10s submit for credit tracking
+        if (beforeDur) notifyVideoSubmit(beforeDur, false);
         return { changed: false, body: rawBody };
     }
 

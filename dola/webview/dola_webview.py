@@ -44,7 +44,13 @@ STATE_FILE = ROOT / "accounts.json"
 
 
 def log(msg: str) -> None:
-    print(f"[dola-webview] {msg}", flush=True)
+    safe = re.sub(
+        r"((?:access_token|id_token|oauth_token)=)[^&\s'\"]+",
+        r"\1<redacted>",
+        str(msg),
+        flags=re.IGNORECASE,
+    )
+    print(f"[dola-webview] {safe}", flush=True)
 
 
 def load_state() -> dict:

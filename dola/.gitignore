@@ -1,0 +1,12 @@
+# Local credentials and account exports
+google_mail*.txt
+t.txt
+G:\\cookies\\
+
+# Runtime account credit state
+webview/daily_profile_usage.json
+webview/daily_profile_usage.lock
+
+# Local WebView profiles and logs
+webview/profiles/
+webview/logs/

@@ -22,8 +22,18 @@ def account_id_from_email(email: str) -> str:
 
 
 def exported_cookie(out_dir: Path, account_id: str) -> Path | None:
-    path = out_dir / f"dola_{account_id}.txt"
-    return path if path.is_file() and path.stat().st_size > 0 else None
+    candidates = (
+        out_dir / f"dola_{account_id}.txt",
+        out_dir / f"dola-{account_id}.txt",
+        out_dir / f"{account_id}.txt",
+    )
+    for path in candidates:
+        try:
+            if path.is_file() and path.stat().st_size > 0:
+                return path
+        except OSError:
+            continue
+    return None
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -53,8 +63,14 @@ def main(argv: list[str] | None = None) -> int:
 
     pending: list[tuple[int, str, str | None]] = []
     skipped = 0
+    seen: set[str] = set()
     for index, (email, _password) in enumerate(rows):
         account_id = account_id_from_email(email)
+        if account_id in seen:
+            skipped += 1
+            print(f"[batch-export] skip duplicate index={index} account={account_id}", flush=True)
+            continue
+        seen.add(account_id)
         existing = exported_cookie(out_dir, account_id)
         if existing and not args.force:
             skipped += 1

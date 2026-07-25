@@ -25,7 +25,13 @@ PASSWORD_SUBMIT_DELAY = 1.8
 
 def _log(log: Optional[LogFn], msg: str) -> None:
     if log:
-        log(msg)
+        safe = re.sub(
+            r"((?:access_token|id_token|oauth_token)=)[^&\s'\"]+",
+            r"\1<redacted>",
+            str(msg),
+            flags=re.IGNORECASE,
+        )
+        log(safe)
 
 
 def js_eval(window, expression: str) -> Any:
