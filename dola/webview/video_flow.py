@@ -232,6 +232,14 @@ JS_FIND_VIDEOS = r"""
   // Do not pass `push` directly to forEach: its index/array arguments would be
   // misread as messageId/vid and could leak a signed URL into the vid field.
   try { (window.__dolaCliLastVideoUrls || []).forEach(u => push(u)); } catch (e) {}
+  // Prefer API-derived bindings exposed by dola_core. These remain available
+  // even before Dola renders data-message-id on the video card.
+  try {
+    const resolved = window.__dolaListResolvedVideos
+      ? window.__dolaListResolvedVideos(true)
+      : [];
+    resolved.forEach(r => push(r && r.url, r && r.messageId, r && r.vid));
+  } catch (e) {}
 
   // Reseller core: messageId → vid → get_play_info no-watermark URL
   try {

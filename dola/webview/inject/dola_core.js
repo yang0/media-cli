@@ -130,8 +130,20 @@
     function chooseBestVideoUrl(candidates) {
         var best = null, bestScore = -Infinity;
         for (var i = 0; i < candidates.length; i++) {
-            var score = scoreVideoUrlCandidate(candidates[i]);
-            if (score > bestScore) { best = candidates[i]; bestScore = score; }
+            var candidate = candidates[i];
+            if (!candidate) continue;
+            var values = Array.isArray(candidate.url) ? candidate.url : [candidate.url];
+            for (var j = 0; j < values.length; j++) {
+                var item = {
+                    key: candidate.key,
+                    source: candidate.source,
+                    url: values[j],
+                    width: candidate.width,
+                    height: candidate.height
+                };
+                var score = scoreVideoUrlCandidate(item);
+                if (score > bestScore) { best = item; bestScore = score; }
+            }
         }
         return best ? { url: best.url, width: best.width, height: best.height, score: bestScore } : null;
     }
@@ -142,7 +154,22 @@
         var filtered = [];
         for (var i = 0; i < candidates.length; i++) {
             var c = candidates[i];
-            if (c && typeof c.url === 'string' && c.url.indexOf('http') === 0) filtered.push(c);
+            if (!c) continue;
+            // Dola may return a URL, an array of backup URLs, or one/two
+            // layers of Base64 in the same response fields.
+            var values = Array.isArray(c.url) ? c.url : [c.url];
+            for (var j = 0; j < values.length; j++) {
+                var decoded = decodeVideoUrl(values[j]);
+                if (typeof decoded === 'string' && /^https?:\/\//i.test(decoded)) {
+                    filtered.push({
+                        key: c.key,
+                        source: c.source,
+                        url: decoded,
+                        width: c.width,
+                        height: c.height
+                    });
+                }
+            }
         }
         var best = chooseBestVideoUrl(filtered);
         if (!best) return;
@@ -390,9 +417,13 @@
         if (!encoded || typeof encoded !== 'string') return null;
         if (encoded.indexOf('http') === 0 || encoded.indexOf('://') !== -1) return encoded;
         try {
-            var decoded = atob(encoded);
+            var normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+            while (normalized.length % 4) normalized += '=';
+            var decoded = atob(normalized);
             if (decoded.indexOf('http') === 0) return decoded;
-            var decoded2 = atob(decoded);
+            var normalized2 = decoded.replace(/-/g, '+').replace(/_/g, '/');
+            while (normalized2.length % 4) normalized2 += '=';
+            var decoded2 = atob(normalized2);
             if (decoded2.indexOf('http') === 0) return decoded2;
         } catch(_) {}
         return encoded;
@@ -532,6 +563,40 @@
     window.__dolaGetVidByMessageId = function(mid) {
         if (!mid) return null;
         return videoDb.get(mid) || null;
+    };
+    // Stable messageId -> vid -> URL bindings for the scheduler. This avoids
+    // treating whichever video is newest in the DOM as the current job result.
+    window.__dolaListResolvedVideos = function(resolveMissing) {
+        var rows = [];
+        var entries = Array.from(videoDb.entries()).slice(-50);
+        for (var i = 0; i < entries.length; i++) {
+            var mid = String(entries[i][0] || '');
+            var vid = String(entries[i][1] || '');
+            if (!vid) continue;
+            var info = videoUrlDb.get(vid);
+            if ((!info || !info.url) && resolveMissing && i >= Math.max(0, entries.length - 8)) {
+                try {
+                    var resolved = resolveVideoUrl(vid);
+                    if (resolved && resolved.mainUrl) {
+                        info = {
+                            url: resolved.mainUrl,
+                            width: resolved.width,
+                            height: resolved.height
+                        };
+                    }
+                } catch (_) {}
+            }
+            if (info && info.url && /^https?:\/\//i.test(info.url)) {
+                rows.push({
+                    messageId: mid,
+                    vid: vid,
+                    url: makeNoWatermarkUrl(info.url),
+                    width: info.width || 0,
+                    height: info.height || 0
+                });
+            }
+        }
+        return rows;
     };
     // 完全按下载按钮逻辑解析视频URL（缓存 → get_play_info XHR → decode → 无水印 → 评分）
     window.__dolaResolveVideoUrl = resolveVideoUrl;

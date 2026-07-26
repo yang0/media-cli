@@ -59,7 +59,12 @@ node src\cli.js video generate `
 # Inspect scheduler state
 node src\cli.js pool status --json
 node src\cli.js jobs list --limit 20 --json
+node src\cli.js jobs cancel <jobId> --json
+node src\cli.js jobs cleanup --request-prefix angle- --yes --json
 node src\cli.js worker status --json
+
+# Re-open a manually closed account WebView; cookies/profile are reused
+dola account open AureliaBronson1l5hd
 ```
 
 Start a logged-in Dola Chrome session with CDP port `9221`. The CLI uses the account pool at `G:\cookies\dola` by default; override it with `--account-pool` or `DOLA_ACCOUNT_POOL`. Use `--new-chat`, `--session`, `--file`, `--batch-prompt-file`, and `--resume` as needed.
@@ -86,6 +91,11 @@ copied references, result metadata, log, video SHA-256, account, message ID and
 video ID. The SQLite state and global WebView profiles live in the user data
 directory (`%LOCALAPPDATA%\dola-cli` on Windows). Existing simple
 `dola --video-gen ...` calls are routed through this durable path.
+
+To re-open any account directly from any working directory, run
+`dola account open <accountId>`. The WebView uses that account's isolated
+profile. Its **Dola** menu includes **刷新当前页面** to reload the current URL
+without creating another profile.
 
 ## Account pool
 

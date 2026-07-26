@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const JOB_CLI = path.resolve(HERE, '..', '..', 'webview', 'job_cli.py');
 const PACKAGE_ROOT = path.resolve(HERE, '..', '..');
-const JOB_RESOURCES = new Set(['video', 'jobs', 'pool', 'worker']);
+const JOB_RESOURCES = new Set(['video', 'jobs', 'pool', 'worker', 'account']);
 
 function isInstalledPackage() {
   return PACKAGE_ROOT.split(path.sep).includes('node_modules');

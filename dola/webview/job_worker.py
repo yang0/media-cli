@@ -211,7 +211,9 @@ class Worker:
             }
         )
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
-        self.store.set_submitting(job_id)
+        if not self.store.set_submitting(job_id):
+            _append_log(log_file, f"[{now_iso()}] reservation was cancelled before process start")
+            return
         _append_log(log_file, f"[{now_iso()}] start account={job['account_id']} duration={job['duration']}s")
         process = subprocess.Popen(
             command,
@@ -238,8 +240,14 @@ class Worker:
         submitted = False
         result_event: dict[str, Any] | None = None
         generated_event: dict[str, Any] | None = None
+        cancelled = False
         while process.poll() is None:
             self.store.heartbeat_lease(job_id, self.worker_id)
+            if self.store.get(job_id)["state"] == "cancelled":
+                cancelled = True
+                process.terminate()
+                _append_log(log_file, f"[{now_iso()}] cancelled; terminating WebView process")
+                continue
             events, seen_events = _read_events(event_file, seen_events)
             for event in events:
                 if event.get("type") == "submitted" and not submitted:
@@ -259,6 +267,8 @@ class Worker:
         drain_thread.join(timeout=5)
         if process.stdout is not None:
             process.stdout.close()
+        if cancelled:
+            return
         events, _ = _read_events(event_file, seen_events)
         for event in events:
             if event.get("type") == "submitted" and not submitted:

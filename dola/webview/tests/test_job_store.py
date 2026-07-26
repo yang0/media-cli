@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import os
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 from pathlib import Path
@@ -11,7 +12,7 @@ from pathlib import Path
 WEBVIEW = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WEBVIEW))
 
-from job_store import JobStore, day_key  # noqa: E402
+from job_store import JobStore, day_key, pid_alive  # noqa: E402
 
 
 class JobStoreTests(unittest.TestCase):
@@ -40,6 +41,10 @@ class JobStoreTests(unittest.TestCase):
         self.assertFalse(created_again)
         self.assertEqual(first["jobId"], second["jobId"])
         self.assertEqual(len(self.store.list_jobs()), 1)
+
+    def test_pid_alive_distinguishes_current_and_missing_process(self):
+        self.assertTrue(pid_alive(os.getpid()))
+        self.assertFalse(pid_alive(2_000_000_000))
 
     def test_three_concurrent_claims_have_unique_accounts(self):
         for index in range(5):
@@ -121,6 +126,27 @@ class JobStoreTests(unittest.TestCase):
             ).fetchone()
         self.assertEqual((old["reserved"], old["spent"]), (0, 0))
         self.assertEqual((new["reserved"], new["spent"]), (0, 2))
+
+    def test_cleanup_by_request_prefix_cancels_and_releases_only_matching_jobs(self):
+        first, _ = self.submit("angle-01", duration=15)
+        second, _ = self.submit("angle-02", duration=15)
+        keep, _ = self.submit("keep-this", duration=15)
+        self.store.reserve_next(["a", "b"], "worker")
+        self.store.reserve_next(["a", "b"], "worker")
+        cancelled = self.store.cleanup_unsubmitted(request_prefix="angle-")
+        self.assertEqual({job["jobId"] for job in cancelled}, {first["jobId"], second["jobId"]})
+        self.assertEqual(self.store.get(keep["jobId"])["state"], "queued")
+        pool = self.store.pool_status(["a", "b"])
+        self.assertTrue(all(item["reserved"] == 0 and item["busyJobId"] == "" for item in pool))
+
+    def test_cancel_after_submit_does_not_refund_spent_credit(self):
+        job, _ = self.submit("submitted-cancel", duration=10)
+        self.store.reserve_next(["a"], "worker")
+        self.store.mark_submitted(job["jobId"], {})
+        cancelled = self.store.cancel(job["jobId"])
+        self.assertEqual(cancelled["state"], "cancelled")
+        usage = self.store.pool_status(["a"])[0]
+        self.assertEqual((usage["spent"], usage["reserved"]), (2, 0))
 
 
 if __name__ == "__main__":

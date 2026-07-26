@@ -39,6 +39,46 @@ DURATION_COST = {5: 1, 10: 2, 15: 3}
 TERMINAL_STATES = {"succeeded", "failed", "timed_out", "needs_review", "cancelled"}
 
 
+def pid_alive(pid: int) -> bool:
+    """Return whether a recorded worker PID still exists."""
+    try:
+        value = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if value <= 0:
+        return False
+    if value == os.getpid():
+        return True
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            process_query_limited_information = 0x1000
+            still_active = 259
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.OpenProcess(process_query_limited_information, False, value)
+            if not handle:
+                return False
+            try:
+                exit_code = ctypes.c_ulong()
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                    return False
+                return int(exit_code.value) == still_active
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:
+            # Fall back to heartbeat-only semantics if Win32 inspection itself
+            # is unavailable; false negatives can create duplicate workers.
+            return True
+    try:
+        os.kill(value, 0)
+        return True
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
@@ -494,8 +534,18 @@ class JobStore:
             con.commit()
         return None
 
-    def set_submitting(self, job_id: str) -> None:
-        self._set_state(job_id, "submitting")
+    def set_submitting(self, job_id: str) -> bool:
+        """Move a reserved job to submitting unless it was cancelled meanwhile."""
+        with self.connect() as con:
+            con.execute("BEGIN IMMEDIATE")
+            cur = con.execute(
+                "UPDATE jobs SET state='submitting',updated_at=? WHERE job_id=? AND state='reserved'",
+                (now_iso(), job_id),
+            )
+            if cur.rowcount:
+                self._event(con, job_id, "submitting", {})
+            con.commit()
+            return bool(cur.rowcount)
 
     def mark_submitted(self, job_id: str, payload: dict | None = None) -> None:
         payload = payload or {}
@@ -654,6 +704,72 @@ class JobStore:
             rows = con.execute("SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (max(1, min(limit, 500)),)).fetchall()
         return [self._public(row) for row in rows]
 
+    def cancel(self, job_id: str, reason: str = "cancelled by user") -> dict:
+        """Cancel one job and refund only an unconfirmed credit reservation."""
+        now = now_iso()
+        with self.connect() as con:
+            con.execute("BEGIN IMMEDIATE")
+            job = con.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+            if not job:
+                raise KeyError(job_id)
+            if job["state"] in TERMINAL_STATES:
+                con.commit()
+                return self._public(job)
+            submitted = bool(job["submitted_at"])
+            con.execute(
+                "UPDATE jobs SET state='cancelled',updated_at=?,completed_at=?,error=? WHERE job_id=?",
+                (now, now, str(reason)[:4000], job_id),
+            )
+            self._release_lease_locked(con, job_id, release_credit=not submitted)
+            self._event(
+                con,
+                job_id,
+                "cancelled",
+                {"reason": str(reason)[:1000], "creditReleased": not submitted},
+            )
+            row = con.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+            con.commit()
+            return self._public(row)
+
+    def cleanup_unsubmitted(
+        self,
+        *,
+        request_prefix: str = "",
+        reason: str = "cancelled by jobs cleanup",
+    ) -> list[dict]:
+        """Cancel queued/in-flight jobs that have no confirmed remote submission."""
+        now = now_iso()
+        with self.connect() as con:
+            con.execute("BEGIN IMMEDIATE")
+            sql = """
+                SELECT * FROM jobs
+                WHERE state IN ('queued','reserved','submitting')
+                  AND (submitted_at IS NULL OR submitted_at='')
+            """
+            params: list[Any] = []
+            if request_prefix:
+                sql += " AND request_id LIKE ?"
+                params.append(f"{request_prefix}%")
+            sql += " ORDER BY created_at,job_id"
+            jobs = con.execute(sql, params).fetchall()
+            cancelled: list[dict] = []
+            for job in jobs:
+                con.execute(
+                    "UPDATE jobs SET state='cancelled',updated_at=?,completed_at=?,error=? WHERE job_id=?",
+                    (now, now, str(reason)[:4000], job["job_id"]),
+                )
+                self._release_lease_locked(con, job["job_id"], release_credit=True)
+                self._event(
+                    con,
+                    job["job_id"],
+                    "cancelled",
+                    {"reason": str(reason)[:1000], "creditReleased": True},
+                )
+                row = con.execute("SELECT * FROM jobs WHERE job_id=?", (job["job_id"],)).fetchone()
+                cancelled.append(self._public(row))
+            con.commit()
+            return cancelled
+
     def pool_status(self, accounts: list[str]) -> list[dict]:
         day = day_key()
         with self.connect() as con:
@@ -706,12 +822,13 @@ class JobStore:
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
             rows = con.execute(
-                "SELECT worker_id,heartbeat_at,stop_requested FROM workers WHERE worker_id<>?",
+                "SELECT worker_id,pid,heartbeat_at,stop_requested FROM workers WHERE worker_id<>?",
                 (worker_id,),
             ).fetchall()
             current = datetime.now(timezone.utc)
             if any(
                 not row["stop_requested"]
+                and pid_alive(row["pid"])
                 and (current - datetime.fromisoformat(row["heartbeat_at"])).total_seconds() < 35
                 for row in rows
             ):
@@ -750,7 +867,10 @@ class JobStore:
             "concurrency": row["concurrency"],
             "startedAt": row["started_at"],
             "heartbeatAt": row["heartbeat_at"],
-            "alive": (now - datetime.fromisoformat(row["heartbeat_at"])).total_seconds() < 35,
+            "alive": (
+                pid_alive(row["pid"])
+                and (now - datetime.fromisoformat(row["heartbeat_at"])).total_seconds() < 35
+            ),
             "stopRequested": bool(row["stop_requested"]),
         } for row in rows]
 

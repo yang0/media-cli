@@ -293,6 +293,7 @@ class App(tk.Tk):
 
         btns = tk.Frame(self)
         btns.pack(fill="x", padx=12, pady=10)
+        tk.Button(btns, text="重新打开账号 WebView", command=self.open_account_webview).pack(side="left", padx=4)
         tk.Button(btns, text="刷新", command=self.refresh).pack(side="left", padx=4)
         tk.Button(btns, text="新建账号", command=self.create).pack(side="left", padx=4)
         tk.Button(btns, text="删除账号", command=self.delete_selected).pack(side="left", padx=4)
@@ -459,6 +460,29 @@ class App(tk.Tk):
             str(ROOT / "logs"),
         ]
         launch_hidden(cmd, f"inject_{acc}")
+
+    def open_account_webview(self) -> None:
+        """Open the selected account's normal WebView using its isolated profile."""
+        acc = self.selected_id()
+        if not acc:
+            messagebox.showinfo("提示", "请先选择一个账号", parent=self)
+            return
+        ensure_profile(acc)
+        cmd = [
+            pyw(),
+            "-u",
+            str(SHELL),
+            "--account",
+            acc,
+            "--profiles",
+            str(PROFILES),
+            "--out",
+            str(COOKIE_OUT),
+            "--url",
+            "https://www.dola.com/chat",
+        ]
+        launch_hidden(cmd, f"account_{acc}")
+        self.status.set(f"已重新打开账号 WebView: {acc}")
 
     def auto_login_from_file(self) -> None:
         accounts = ROOT.parent / "google_mail.txt"

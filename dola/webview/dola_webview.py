@@ -212,6 +212,17 @@ def make_menu(
         if w:
             w.load_url(home_url)
 
+    def do_refresh():
+        w = window_holder.get("window")
+        if not w:
+            return
+        try:
+            current = str(w.get_current_url() or home_url)
+            w.load_url(current)
+            log(f"page refreshed: {current[:160]}")
+        except Exception as exc:
+            log(f"page refresh failed: {exc}")
+
     def do_login_auto():
         w = window_holder.get("window")
         if not w:
@@ -255,6 +266,7 @@ def make_menu(
             log(f"clear cookies failed: {exc}")
 
     items = [
+        webview.menu.MenuAction("刷新当前页面", do_refresh),
         webview.menu.MenuAction("打开 Dola 首页", do_home),
         webview.menu.MenuAction("尝试点 Log In / Google", do_login_hint),
     ]

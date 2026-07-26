@@ -56,6 +56,14 @@ def main(argv: list[str] | None = None) -> int:
               if (/^https?:/i.test(vid || '')) vid = '';
               let resolved = vid && window.__dolaResolveVideoUrl ? window.__dolaResolveVideoUrl(vid) : null;
               let url = resolved && resolved.mainUrl || '';
+              if (!url && mid && window.__dolaListResolvedVideos) {{
+                const exact = window.__dolaListResolvedVideos(true)
+                  .find(item => String(item.messageId || '') === String(mid));
+                if (exact) {{
+                  vid = exact.vid || vid;
+                  url = exact.url || '';
+                }}
+              }}
               // The saved session belongs to one job. If Dola did not expose a
               // messageId/vid, reload that exact conversation and use its last
               // playable video, never a video from another chat/profile.

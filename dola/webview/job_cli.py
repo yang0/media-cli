@@ -34,7 +34,6 @@ def start_worker(store: JobStore, concurrency: int, account_pool: Path, profiles
     alive = [item for item in store.worker_status() if item["alive"] and not item["stopRequested"]]
     if alive:
         return {"started": False, "workers": alive}
-    previous_ids = {item["workerId"] for item in store.worker_status()}
     command = [
         sys.executable,
         str(ROOT / "job_worker.py"),
@@ -47,27 +46,59 @@ def start_worker(store: JobStore, concurrency: int, account_pool: Path, profiles
         "--profiles",
         str(profiles),
     ]
-    kwargs = {
-        "cwd": str(ROOT),
-        "env": {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
-        "stdin": subprocess.DEVNULL,
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
-        "close_fds": True,
+    log_path = store.db_path.with_name("worker-bootstrap.log")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if log_path.is_file() and log_path.stat().st_size > 2 * 1024 * 1024:
+        log_path.write_text("", encoding="utf-8")
+    last_pid = 0
+    for attempt in range(1, 3):
+        previous_ids = {item["workerId"] for item in store.worker_status()}
+        log_handle = log_path.open("a", encoding="utf-8")
+        log_handle.write(f"\n[{now_iso()}] bootstrap attempt={attempt}\n")
+        log_handle.flush()
+        kwargs = {
+            "cwd": str(ROOT),
+            "env": {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
+            "stdin": subprocess.DEVNULL,
+            "stdout": log_handle,
+            "stderr": subprocess.STDOUT,
+            "close_fds": True,
+        }
+        if os.name == "nt":
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+        try:
+            process = subprocess.Popen(command, **kwargs)
+            last_pid = process.pid
+        finally:
+            log_handle.close()
+        deadline = time.time() + 6
+        stable_since = 0.0
+        while time.time() < deadline:
+            alive = [
+                item for item in store.worker_status()
+                if item["alive"] and not item["stopRequested"] and item["workerId"] not in previous_ids
+            ]
+            if alive:
+                if not stable_since:
+                    stable_since = time.time()
+                if time.time() - stable_since >= 2:
+                    return {
+                        "started": True,
+                        "pid": last_pid,
+                        "workers": alive,
+                        "logFile": str(log_path),
+                        "attempt": attempt,
+                    }
+            else:
+                stable_since = 0.0
+            time.sleep(0.2)
+    return {
+        "started": False,
+        "pid": last_pid,
+        "workers": [],
+        "logFile": str(log_path),
+        "error": "worker failed both startup stability checks",
     }
-    if os.name == "nt":
-        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
-    process = subprocess.Popen(command, **kwargs)
-    deadline = time.time() + 8
-    while time.time() < deadline:
-        alive = [
-            item for item in store.worker_status()
-            if item["alive"] and not item["stopRequested"] and item["workerId"] not in previous_ids
-        ]
-        if alive:
-            return {"started": True, "pid": process.pid, "workers": alive}
-        time.sleep(0.2)
-    return {"started": True, "pid": process.pid, "workers": []}
 
 
 def parser() -> argparse.ArgumentParser:
@@ -110,6 +141,13 @@ def parser() -> argparse.ArgumentParser:
     jc = jobs.add_subparsers(dest="action", required=True)
     listing = jc.add_parser("list")
     listing.add_argument("--limit", type=int, default=50)
+    cancel = jc.add_parser("cancel")
+    cancel.add_argument("job_id")
+    cancel.add_argument("--reason", default="cancelled by user")
+    cleanup = jc.add_parser("cleanup")
+    cleanup.add_argument("--request-prefix", default="")
+    cleanup.add_argument("--reason", default="cancelled by jobs cleanup")
+    cleanup.add_argument("--yes", action="store_true", help="Confirm bulk cancellation")
 
     pool = sub.add_parser("pool")
     pool.add_subparsers(dest="action", required=True).add_parser("status")
@@ -120,7 +158,53 @@ def parser() -> argparse.ArgumentParser:
     start.add_argument("--concurrency", type=int, default=3)
     wc.add_parser("status")
     wc.add_parser("stop")
+
+    account = sub.add_parser("account")
+    ac = account.add_subparsers(dest="action", required=True)
+    open_account = ac.add_parser("open", help="open one account's isolated WebView")
+    open_account.add_argument("account_id")
+    open_account.add_argument("--url", default="https://www.dola.com/chat")
     return p
+
+
+def open_account_webview(account_id: str, profiles: Path, cookie_pool: Path, url: str) -> dict:
+    """Open a visible WebView bound to one account's isolated profile."""
+    account_id = str(account_id).strip()
+    if not account_id or account_id in {".", ".."} or any(part in account_id for part in ("/", "\\", "\x00")):
+        raise ValueError("invalid account id")
+    profile = profiles / account_id
+    profile.mkdir(parents=True, exist_ok=True)
+    executable = Path(sys.executable)
+    if os.name == "nt":
+        pythonw = executable.with_name("pythonw.exe")
+        if pythonw.exists():
+            executable = pythonw
+    command = [
+        str(executable),
+        str(ROOT / "dola_webview.py"),
+        "--account", account_id,
+        "--profiles", str(profiles),
+        "--out", str(cookie_pool),
+        "--url", str(url),
+    ]
+    kwargs = {
+        "cwd": str(ROOT),
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if os.name == "nt":
+        # Keep the WebView window visible while detaching it from the CLI.
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+    process = subprocess.Popen(command, **kwargs)
+    return {
+        "opened": True,
+        "accountId": account_id,
+        "pid": process.pid,
+        "profileDir": str(profile),
+        "url": str(url),
+    }
 
 
 def parse_seconds(value: str) -> int:
@@ -164,6 +248,9 @@ def main(argv: list[str] | None = None) -> int:
     store = JobStore(Path(args.db))
     account_pool = Path(args.account_pool)
     profiles = Path(args.profiles)
+    if args.resource == "account" and args.action == "open":
+        emit(open_account_webview(args.account_id, profiles, account_pool, args.url))
+        return 0
     if args.resource == "video" and args.action in {"submit", "generate"}:
         prompt = args.prompt
         if args.prompt_file:
@@ -272,8 +359,25 @@ def main(argv: list[str] | None = None) -> int:
         emit({**job, "downloadedFile": str(target)})
         return 0
     if args.resource == "jobs":
-        emit({"jobs": store.list_jobs(args.limit)})
-        return 0
+        if args.action == "list":
+            emit({"jobs": store.list_jobs(args.limit)})
+            return 0
+        if args.action == "cancel":
+            emit(store.cancel(args.job_id, args.reason))
+            return 0
+        if args.action == "cleanup":
+            if not args.yes:
+                raise ValueError("jobs cleanup requires --yes")
+            cancelled = store.cleanup_unsubmitted(
+                request_prefix=args.request_prefix,
+                reason=args.reason,
+            )
+            emit({
+                "cancelledCount": len(cancelled),
+                "requestPrefix": args.request_prefix,
+                "jobs": cancelled,
+            })
+            return 0
     if args.resource == "pool":
         emit({"accounts": store.pool_status(discover_accounts(profiles, account_pool))})
         return 0

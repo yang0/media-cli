@@ -140,9 +140,12 @@ Commands:
   dola video generate ...     Synchronous submit + wait convenience command.
   dola video download <id>    Copy or recover the exact job's video.
   dola jobs list              List recent jobs and their prompt mappings.
+  dola jobs cancel <id>       Cancel one job and release unsubmitted credits.
+  dola jobs cleanup --yes     Cancel unsubmitted pending jobs and release leases.
   dola pool status            Show daily credits, reservations, and busy accounts.
   dola worker start           Start the hidden worker (default concurrency: 3).
   dola worker status|stop     Inspect or stop the worker.
+  dola account open <id>      Open that account's isolated WebView.
 
 Durable video rules:
   - Daily credits: 5s=1, 10s=2, 15s=3; each account has 4 credits/day.
@@ -168,7 +171,11 @@ Video demos (PowerShell):
   # Pool / worker inspection
   dola pool status --json
   dola jobs list --limit 20 --json
+  dola jobs cleanup --request-prefix angle- --yes --json
   dola worker status --json
+
+  # Re-open a manually closed account WebView (profile and cookies are reused)
+  dola account open AureliaBronson1l5hd
 
   # Idempotent retry from an external caller
   dola video submit --prompt "Same request" --duration 5 \`

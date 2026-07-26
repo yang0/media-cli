@@ -29,8 +29,19 @@ dola video submit --prompt "A girl turns toward the camera" --duration 15 `
 dola video status <jobId> --json
 dola video wait <jobId> --timeout 35m --json
 dola video download <jobId> --out E:\videos --json
+dola jobs cleanup --request-prefix angle- --yes --json
 dola pool status --json
+dola account open AureliaBronson1l5hd
 ```
+
+`dola account open <accountId>` reopens a selected account's visible WebView
+with its isolated profile and cookies. Use the WebView **Dola** menu's refresh
+action to reload the current page.
+
+If WebView windows are closed while jobs are being submitted, use
+`dola jobs cancel <jobId>` for one task or `dola jobs cleanup --yes` for all
+unsubmitted pending tasks. Cleanup releases account leases and unused credit
+reservations. Add `--request-prefix` to limit cleanup to one known batch.
 
 If Python is installed in a non-standard location, set `DOLA_PYTHON` before
 installing. To use an existing pywebview environment, set `DOLA_PYTHON` before
