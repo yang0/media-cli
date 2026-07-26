@@ -5,7 +5,12 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const JOB_CLI = path.resolve(HERE, '..', '..', 'webview', 'job_cli.py');
+const PACKAGE_ROOT = path.resolve(HERE, '..', '..');
 const JOB_RESOURCES = new Set(['video', 'jobs', 'pool', 'worker']);
+
+function isInstalledPackage() {
+  return PACKAGE_ROOT.split(path.sep).includes('node_modules');
+}
 
 function pythonExecutable() {
   if (process.env.DOLA_PYTHON) return process.env.DOLA_PYTHON;
@@ -14,13 +19,24 @@ function pythonExecutable() {
 }
 
 function runPython(args) {
+  const env = {
+    ...process.env,
+    // Job artifacts belong to the caller, even when the CLI is installed globally.
+    DOLA_JOBS_ROOT: process.env.DOLA_JOBS_ROOT || path.join(process.cwd(), 'downloads', 'jobs'),
+    PYTHONUTF8: '1',
+    PYTHONIOENCODING: 'utf-8',
+  };
+  if (isInstalledPackage() && !env.DOLA_DATA_DIR) {
+    const dataRoot = process.env.LOCALAPPDATA
+      ? path.join(process.env.LOCALAPPDATA, 'dola-cli')
+      : path.join(process.env.HOME || process.cwd(), '.local', 'share', 'dola-cli');
+    env.DOLA_DATA_DIR = dataRoot;
+  }
   const result = spawnSync(pythonExecutable(), [JOB_CLI, ...args], {
-    cwd: path.dirname(JOB_CLI),
-    env: {
-      ...process.env,
-      PYTHONUTF8: '1',
-      PYTHONIOENCODING: 'utf-8',
-    },
+    // Keep the caller's working directory so portable job artifacts land in
+    // ./downloads/jobs instead of inside the global npm installation.
+    cwd: process.cwd(),
+    env,
     encoding: 'utf8',
     windowsHide: true,
     stdio: ['inherit', 'pipe', 'pipe'],

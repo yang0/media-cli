@@ -83,8 +83,9 @@ dola pool status
 `dola video generate ...` is the blocking convenience form. Job artifacts are
 stored under `downloads/jobs/<date>/<jobId>/`, including the exact request,
 copied references, result metadata, log, video SHA-256, account, message ID and
-video ID. Existing simple `dola --video-gen ...` calls are routed through this
-durable path.
+video ID. The SQLite state and global WebView profiles live in the user data
+directory (`%LOCALAPPDATA%\dola-cli` on Windows). Existing simple
+`dola --video-gen ...` calls are routed through this durable path.
 
 ## Account pool
 

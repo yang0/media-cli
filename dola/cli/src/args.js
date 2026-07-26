@@ -198,7 +198,7 @@ Options:
 
 Environment:
   DOLA_ACCOUNT_POOL         Cookie pool directory (default: ${DEFAULT_ACCOUNT_POOL}).
-  DOLA_DATA_DIR             SQLite state directory (default: cli/.dola).
+  DOLA_DATA_DIR             SQLite state directory (default: user data directory).
   DOLA_JOBS_ROOT            Job artifact root (default: cli/downloads/jobs).
 `);
 }

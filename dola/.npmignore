@@ -1,0 +1,13 @@
+google_mail*.txt
+t.txt
+G:\\cookies\\
+webview/.venv/
+webview/profiles/
+webview/logs/
+webview/test-cookie-output/
+webview/__pycache__/
+webview/tests/
+cli/.dola/
+cli/downloads/
+register/
+*.log

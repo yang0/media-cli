@@ -4,6 +4,38 @@ CLI for Dola chat, image generation, video generation, attachments, downloads, a
 
 Code is modular under `cli/src/` (entry `cli/src/cli.js`, orchestration `main.js`, domain folders for accounts / media / video / chat).
 
+## Install globally
+
+From a checkout, install the package once. The `dola` command is then available
+from any directory. The installer includes the WebView worker and creates a
+private Python environment for pywebview on Windows.
+
+```powershell
+npm install -g E:\projectHome\media-cli\dola
+dola --help
+```
+
+The global package keeps mutable state outside the npm installation directory:
+
+- Windows data/profile root: `%LOCALAPPDATA%\dola-cli`
+- Job artifacts: `downloads\jobs` under the directory where the command is run
+- Cookie pool: `G:\cookies\dola` by default, or `DOLA_ACCOUNT_POOL`
+
+Useful global commands:
+
+```powershell
+dola video submit --prompt "A girl turns toward the camera" --duration 15 `
+  --file E:\temp\avatar.webp --request-id demo-001 --json
+dola video status <jobId> --json
+dola video wait <jobId> --timeout 35m --json
+dola video download <jobId> --out E:\videos --json
+dola pool status --json
+```
+
+If Python is installed in a non-standard location, set `DOLA_PYTHON` before
+installing. To use an existing pywebview environment, set `DOLA_PYTHON` before
+running `dola`.
+
 ### WebView2 登录壳（推荐，少 Chrome 弹窗）
 
 ```bat

@@ -16,10 +16,22 @@ from urllib.parse import urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
-DEFAULT_DATA_DIR = Path(os.environ.get("DOLA_DATA_DIR") or PROJECT_ROOT / "cli" / ".dola")
+_USER_DATA_ROOT = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / ".local" / "share")) / "dola-cli"
+_LEGACY_DATA_ROOT = PROJECT_ROOT / "cli" / ".dola"
+_LEGACY_JOBS_ROOT = PROJECT_ROOT / "cli" / "downloads" / "jobs"
+DEFAULT_DATA_DIR = Path(
+    os.environ.get("DOLA_DATA_DIR")
+    or (_LEGACY_DATA_ROOT if _LEGACY_DATA_ROOT.exists() else _USER_DATA_ROOT)
+)
 DEFAULT_DB = Path(os.environ.get("DOLA_JOB_DB") or DEFAULT_DATA_DIR / "jobs.sqlite3")
-DEFAULT_JOBS_ROOT = Path(os.environ.get("DOLA_JOBS_ROOT") or PROJECT_ROOT / "cli" / "downloads" / "jobs")
-DEFAULT_PROFILES = ROOT / "profiles"
+DEFAULT_JOBS_ROOT = Path(
+    os.environ.get("DOLA_JOBS_ROOT")
+    or (_LEGACY_JOBS_ROOT if _LEGACY_JOBS_ROOT.exists() else Path.cwd() / "downloads" / "jobs")
+)
+DEFAULT_PROFILES = Path(
+    os.environ.get("DOLA_PROFILES_DIR")
+    or (ROOT / "profiles" if (ROOT / "profiles").is_dir() else _USER_DATA_ROOT / "profiles")
+)
 DEFAULT_COOKIE_POOL = Path(os.environ.get("DOLA_ACCOUNT_POOL") or r"G:\cookies\dola")
 SHANGHAI = timezone(timedelta(hours=8))
 DAILY_LIMIT = 4

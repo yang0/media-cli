@@ -1,0 +1,23 @@
+{
+  "name": "dola-cli-global",
+  "version": "0.3.0",
+  "description": "Global Dola chat, image, video, account-pool, and WebView job CLI",
+  "type": "module",
+  "bin": {"dola": "./cli/src/cli.js"},
+  "files": [
+    "cli/src",
+    "cli/package.json",
+    "cli/README.md",
+    "webview/*.py",
+    "webview/inject",
+    "webview/requirements.txt",
+    "scripts/postinstall.cjs",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "npm --prefix cli run check",
+    "start": "node cli/src/cli.js",
+    "postinstall": "node scripts/postinstall.cjs"
+  },
+  "engines": {"node": ">=18"}
+}
