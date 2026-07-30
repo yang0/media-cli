@@ -10,51 +10,53 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const argv = yargs(hideBin(process.argv))
-  .usage('Usage: $0 <prompt> [options]\n       $0 --batch <file> [options]')
+  .scriptName('flow-cli')
+  .usage('$0 <prompt> [options]\n$0 --batch <file> [options]')
   .positional('prompt', {
-    describe: 'Image generation prompt (ignored when --batch is used)',
+    describe: 'Prompt for image or image-to-video generation',
     type: 'string',
   })
   .option('batch', {
     alias: 'b',
-    describe: 'Path to a prompt file. Each line is a prompt. After an empty line, the remaining lines are treated as a global suffix appended to each prompt.',
+    describe: 'Prompt file: one prompt per line; text after the first blank line is appended to every prompt',
     type: 'string',
   })
   .option('ref', {
     alias: 'r',
-    describe: 'Reference image name (uploaded) or file path',
+    describe: 'Project asset name or local reference-image path',
     default: 'avatar.png',
     type: 'string',
   })
   .option('ref-source', {
-    describe: 'Where to get the reference image: uploaded (project assets) or file (local path to upload)',
+    describe: 'Reference source; an existing local --ref path automatically selects file',
     choices: ['uploaded', 'file'],
     default: 'uploaded',
     type: 'string',
   })
   .option('video', {
-    describe: 'Generate an image-to-video clip instead of an image',
+    describe: 'Generate an image-to-video clip',
     type: 'boolean',
     default: false,
   })
   .option('duration', {
-    describe: 'Video duration in seconds',
+    alias: 'd',
+    describe: 'Video duration in seconds (video mode only)',
     choices: [4, 6, 8, 10],
     default: 8,
     type: 'number',
   })
   .option('aspect', {
-    describe: 'Aspect ratio',
+    describe: 'Output aspect ratio',
     default: '16:9',
     type: 'string',
   })
   .option('count', {
-    describe: 'Number of images, e.g. 1x, 2x, 4x',
+    describe: 'Number of results, e.g. 1x, 2x, 4x',
     default: '1x',
     type: 'string',
   })
   .option('model', {
-    describe: 'Model name',
+    describe: 'Image model name (image mode only)',
     default: 'Nano Banana 2',
     type: 'string',
   })
@@ -65,7 +67,7 @@ const argv = yargs(hideBin(process.argv))
   })
   .option('output', {
     alias: 'o',
-    describe: 'Output directory for downloaded images',
+    describe: 'Directory for downloaded images/videos and extracted first frames',
     default: './downloads',
     type: 'string',
   })
@@ -75,16 +77,29 @@ const argv = yargs(hideBin(process.argv))
     type: 'number',
   })
   .option('project-url', {
-    describe: 'Google Flow project URL',
-    default: 'https://labs.google/fx/zh/tools/flow/project/1d49f864-c38c-4365-b144-1d4e7d7d2ca2',
+    describe: 'Flow project URL; otherwise uses FLOW_PROJECT_URL or an open project tab',
     type: 'string',
   })
   .option('debug', {
-    describe: 'Save screenshots and DOM dumps on errors',
+    describe: 'Save screenshots and DOM snapshots for major steps and errors',
     default: false,
     type: 'boolean',
   })
+  .group(['video', 'duration'], 'Video options:')
+  .group(['ref', 'ref-source', 'aspect', 'count', 'model'], 'Generation options:')
+  .group(['batch', 'port', 'output', 'timeout', 'project-url', 'debug'], 'Runtime options:')
+  .example('$0 "Cat in sunlight" -r cat.png', 'Image from a project asset')
+  .example('$0 --video -r E:\\a.webp -d 4 "Turn"', 'Video from a local image')
+  .example('$0 --video -r avatar.webp "Smile and wave"', 'Video from a project asset')
+  .example('$0 -b .\\prompts.txt -r avatar.png -o .\\out', 'Run a prompt batch')
+  .epilog([
+    'Project selection: keep a Flow project open in Chrome, or pass --project-url,',
+    'or set FLOW_PROJECT_URL. Chrome must expose CDP on port 9221 by default.',
+    'Local video references require ffmpeg on PATH for first-frame validation.',
+  ].join('\n'))
+  .wrap(Math.min(120, process.stdout.columns || 120))
   .help()
+  .alias('help', 'h')
   .argv;
 
 const DEBUG_DIR = path.join(__dirname, 'debug');
@@ -204,14 +219,17 @@ async function connectBrowser(port) {
 
 async function getFlowPage(browser, url) {
   const pages = await browser.pages();
-  let page = pages.find(p => p.url().includes('labs.google/fx'));
+  let page = pages.find(p => /labs\.google\/fx\/.+\/tools\/flow\/project\//.test(p.url()));
   if (!page) {
+    if (!url) {
+      throw new Error('No Flow project tab found. Open a project in Chrome, pass --project-url, or set FLOW_PROJECT_URL.');
+    }
     log('Opening new Flow tab...');
     page = await browser.newPage();
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 120000 });
   } else {
     log('Reusing existing Flow tab:', page.url());
-    if (!page.url().includes(url.split('/').pop())) {
+    if (url && !page.url().includes(url.split('/').pop())) {
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 120000 });
     }
     await page.bringToFront();
@@ -836,8 +854,10 @@ async function main() {
       throw new Error(`Video reference file not found: ${argv.ref}`);
     }
 
+    const configuredProjectUrl = argv.projectUrl || process.env.FLOW_PROJECT_URL;
     browser = await connectBrowser(argv.port);
-    const page = await getFlowPage(browser, argv.projectUrl);
+    const page = await getFlowPage(browser, configuredProjectUrl);
+    argv.projectUrl = configuredProjectUrl || page.url();
     await saveDebug(page, 'page-ready');
 
     const savedPaths = [];
