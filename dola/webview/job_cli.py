@@ -140,7 +140,9 @@ def parser() -> argparse.ArgumentParser:
     jobs = sub.add_parser("jobs")
     jc = jobs.add_subparsers(dest="action", required=True)
     listing = jc.add_parser("list")
-    listing.add_argument("--limit", type=int, default=50)
+    listing.add_argument("--limit", type=int, default=20)
+    listing.add_argument("--state", action="append", default=[])
+    listing.add_argument("--all", action="store_true", help="Include cancelled jobs")
     cancel = jc.add_parser("cancel")
     cancel.add_argument("job_id")
     cancel.add_argument("--reason", default="cancelled by user")
@@ -148,6 +150,11 @@ def parser() -> argparse.ArgumentParser:
     cleanup.add_argument("--request-prefix", default="")
     cleanup.add_argument("--reason", default="cancelled by jobs cleanup")
     cleanup.add_argument("--yes", action="store_true", help="Confirm bulk cancellation")
+    prune = jc.add_parser("prune")
+    prune.add_argument("--older-than", default="30d")
+    prune.add_argument("--state", action="append", default=[])
+    prune.add_argument("--keep-files", action="store_true")
+    prune.add_argument("--yes", action="store_true", help="Apply deletion; otherwise preview only")
 
     pool = sub.add_parser("pool")
     pool.add_subparsers(dest="action", required=True).add_parser("status")
@@ -207,7 +214,7 @@ def open_account_webview(account_id: str, profiles: Path, cookie_pool: Path, url
     }
 
 
-def parse_seconds(value: str) -> int:
+def parse_seconds(value: str, *, allow_zero: bool = False) -> int:
     text = str(value).strip().lower()
     factor = 1
     if text.endswith("ms"):
@@ -218,9 +225,11 @@ def parse_seconds(value: str) -> int:
         text, factor = text[:-1], 60
     elif text.endswith("h"):
         text, factor = text[:-1], 3600
+    elif text.endswith("d"):
+        text, factor = text[:-1], 86400
     number = int(float(text) * factor)
-    if number < 1:
-        raise ValueError("timeout must be positive")
+    if number < 0 or (number == 0 and not allow_zero):
+        raise ValueError("duration must be positive")
     return number
 
 
@@ -360,7 +369,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.resource == "jobs":
         if args.action == "list":
-            emit({"jobs": store.list_jobs(args.limit)})
+            emit({
+                "jobs": store.list_jobs(
+                    args.limit,
+                    states=args.state,
+                    include_cancelled=args.all,
+                ),
+                "limit": args.limit,
+                "includeCancelled": bool(args.all),
+                "states": args.state,
+            })
             return 0
         if args.action == "cancel":
             emit(store.cancel(args.job_id, args.reason))
@@ -377,6 +395,14 @@ def main(argv: list[str] | None = None) -> int:
                 "requestPrefix": args.request_prefix,
                 "jobs": cancelled,
             })
+            return 0
+        if args.action == "prune":
+            emit(store.prune_jobs(
+                older_than_seconds=parse_seconds(args.older_than, allow_zero=True),
+                states=args.state or ("cancelled", "failed", "timed_out"),
+                apply=args.yes,
+                delete_files=not args.keep_files,
+            ))
             return 0
     if args.resource == "pool":
         emit({"accounts": store.pool_status(discover_accounts(profiles, account_pool))})

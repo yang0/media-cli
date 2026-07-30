@@ -30,6 +30,7 @@ dola video status <jobId> --json
 dola video wait <jobId> --timeout 35m --json
 dola video download <jobId> --out E:\videos --json
 dola jobs cleanup --request-prefix angle- --yes --json
+dola jobs prune --older-than 30d --json
 dola pool status --json
 dola account open AureliaBronson1l5hd
 ```
@@ -42,6 +43,12 @@ If WebView windows are closed while jobs are being submitted, use
 `dola jobs cancel <jobId>` for one task or `dola jobs cleanup --yes` for all
 unsubmitted pending tasks. Cleanup releases account leases and unused credit
 reservations. Add `--request-prefix` to limit cleanup to one known batch.
+
+`dola jobs list` shows 20 recent non-cancelled jobs by default. Use `--all` or
+`--state cancelled` to inspect cancelled history. `dola jobs prune
+--older-than 30d` only previews old cancelled/failed/timed-out jobs; add `--yes`
+to remove those database records and job directories. Successful videos are
+never pruned.
 
 If Python is installed in a non-standard location, set `DOLA_PYTHON` before
 installing. To use an existing pywebview environment, set `DOLA_PYTHON` before

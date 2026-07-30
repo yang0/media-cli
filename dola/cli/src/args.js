@@ -103,7 +103,7 @@ Options:
                            15s uses POST /chat/completion patch (ability_type=17 + seedance_v2.0).
   --duration <seconds>     Video duration: 5, 10, or 15 only (default: 5).
   --model <name>           Video model override (default: seedance_v2.0 when duration is 15).
-  --aspect-ratio <ratio>   Video size/ratio, e.g. 16:9, 9:16, 1:1 (UI + completion patch).
+  --aspect-ratio <ratio>   9:16, 16:9, 1:1, 3:4, 4:3, or 21:9.
   --out <path>             Image download directory. Default: ${DEFAULT_OUT_DIR}
   --count <n>              Number of images to download. Default: 1
   --no-download            Generate images without downloading them.
@@ -139,7 +139,9 @@ Commands:
   dola video wait <id>        Wait for generation/download to finish.
   dola video generate ...     Synchronous submit + wait convenience command.
   dola video download <id>    Copy or recover the exact job's video.
-  dola jobs list              List recent jobs and their prompt mappings.
+  dola jobs list              List 20 recent jobs; cancelled jobs are hidden.
+  dola jobs list --all        Include cancelled jobs.
+  dola jobs prune             Preview old cancelled/failed/timed-out cleanup.
   dola jobs cancel <id>       Cancel one job and release unsubmitted credits.
   dola jobs cleanup --yes     Cancel unsubmitted pending jobs and release leases.
   dola pool status            Show daily credits, reservations, and busy accounts.
@@ -171,6 +173,9 @@ Video demos (PowerShell):
   # Pool / worker inspection
   dola pool status --json
   dola jobs list --limit 20 --json
+  dola jobs list --state cancelled --json
+  dola jobs prune --older-than 30d --json
+  dola jobs prune --older-than 30d --yes --json
   dola jobs cleanup --request-prefix angle- --yes --json
   dola worker status --json
 
@@ -194,7 +199,7 @@ Options:
   --prompt <text>          Prompt text; use --prompt-file for UTF-8 files.
   --file <path>             Reference file; repeat for multiple references.
   --duration 5|10|15       Video length; 15s defaults to seedance_v2.0.
-  --aspect-ratio <ratio>   16:9, 9:16, or 1:1.
+  --aspect-ratio <ratio>   9:16, 16:9, 1:1, 3:4, 4:3, or 21:9.
   --model <name>            Override the video model.
   --request-id <id>         Idempotency key for video submit.
   --timeout <duration>      Video timeout, e.g. 35m or 1800s.
@@ -314,11 +319,12 @@ export function parseArgs(argv) {
     // Normalize empty file list (0 refs is valid).
     if (!Array.isArray(args.files)) args.files = [];
   }
-  if (args.videoGen && args.aspectRatio !== undefined && !/^\d+(?::\d+|\/\d+)$/.test(String(args.aspectRatio).trim())) {
-    throw new Error("--aspect-ratio must look like 16:9, 9:16, or 1:1.");
-  }
   if (args.videoGen && args.aspectRatio) {
     args.aspectRatio = String(args.aspectRatio).trim().replace("/", ":");
+    const allowedRatios = new Set(["9:16", "16:9", "1:1", "3:4", "4:3", "21:9"]);
+    if (!allowedRatios.has(args.aspectRatio)) {
+      throw new Error("--aspect-ratio must be one of 9:16, 16:9, 1:1, 3:4, 4:3, or 21:9.");
+    }
   }
   // Dola normally finishes video generation in 1-5 minutes. Keep the image
   // default for existing commands, while giving video jobs a practical window.

@@ -67,12 +67,13 @@ export function buildVideoCompletionPatchScript(config) {
           param.duration = TARGET_DURATION;
           // Common ratio field names used by dola video ability.
           if (TARGET_RATIO) {
-            if ("ratio" in param || !("aspect_ratio" in param)) param.ratio = TARGET_RATIO;
-            if ("aspect_ratio" in param) param.aspect_ratio = TARGET_RATIO;
-            if ("video_ratio" in param) param.video_ratio = TARGET_RATIO;
-            if (!("ratio" in param) && !("aspect_ratio" in param) && !("video_ratio" in param)) {
-              param.ratio = TARGET_RATIO;
-            }
+            param.ratio = TARGET_RATIO;
+            param.aspect_ratio = TARGET_RATIO;
+            param.video_ratio = TARGET_RATIO;
+            param.aspectRatio = TARGET_RATIO;
+            param.videoRatio = TARGET_RATIO;
+            param.image_ratio = TARGET_RATIO;
+            param.output_ratio = TARGET_RATIO;
           }
           return true;
         };

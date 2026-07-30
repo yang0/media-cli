@@ -13,6 +13,7 @@ WEBVIEW = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WEBVIEW))
 
 from job_store import JobStore, day_key, pid_alive  # noqa: E402
+from job_store import normalize_aspect_ratio  # noqa: E402
 
 
 class JobStoreTests(unittest.TestCase):
@@ -41,6 +42,13 @@ class JobStoreTests(unittest.TestCase):
         self.assertFalse(created_again)
         self.assertEqual(first["jobId"], second["jobId"])
         self.assertEqual(len(self.store.list_jobs()), 1)
+
+    def test_supported_aspect_ratios_are_normalized(self):
+        for ratio in ("9:16", "16:9", "1:1", "3:4", "4:3", "21:9"):
+            self.assertEqual(normalize_aspect_ratio(ratio), ratio)
+        self.assertEqual(normalize_aspect_ratio("21/9"), "21:9")
+        with self.assertRaises(ValueError):
+            normalize_aspect_ratio("2:3")
 
     def test_pid_alive_distinguishes_current_and_missing_process(self):
         self.assertTrue(pid_alive(os.getpid()))
@@ -147,6 +155,41 @@ class JobStoreTests(unittest.TestCase):
         self.assertEqual(cancelled["state"], "cancelled")
         usage = self.store.pool_status(["a"])[0]
         self.assertEqual((usage["spent"], usage["reserved"]), (2, 0))
+
+    def test_job_list_hides_cancelled_unless_requested(self):
+        visible, _ = self.submit("visible")
+        hidden, _ = self.submit("hidden")
+        self.store.cancel(hidden["jobId"])
+        self.assertEqual(
+            [job["jobId"] for job in self.store.list_jobs()],
+            [visible["jobId"]],
+        )
+        all_ids = {job["jobId"] for job in self.store.list_jobs(include_cancelled=True)}
+        self.assertEqual(all_ids, {visible["jobId"], hidden["jobId"]})
+        cancelled = self.store.list_jobs(states=["cancelled"])
+        self.assertEqual([job["jobId"] for job in cancelled], [hidden["jobId"]])
+
+    def test_prune_is_preview_first_and_removes_cancelled_artifacts(self):
+        job, _ = self.submit("old-cancelled")
+        output_dir = Path(job["outputDir"])
+        self.store.cancel(job["jobId"])
+        with self.store.connect() as con:
+            con.execute(
+                "UPDATE jobs SET created_at=?,updated_at=?,completed_at=? WHERE job_id=?",
+                ("2000-01-01T00:00:00.000+00:00",) * 3 + (job["jobId"],),
+            )
+        preview = self.store.prune_jobs(older_than_seconds=1)
+        self.assertTrue(preview["dryRun"])
+        self.assertEqual(preview["matchedCount"], 1)
+        self.assertTrue(output_dir.is_dir())
+        self.assertEqual(self.store.get(job["jobId"])["state"], "cancelled")
+
+        applied = self.store.prune_jobs(older_than_seconds=1, apply=True)
+        self.assertFalse(applied["dryRun"])
+        self.assertEqual((applied["deletedCount"], applied["deletedFilesCount"]), (1, 1))
+        self.assertFalse(output_dir.exists())
+        with self.assertRaises(KeyError):
+            self.store.get(job["jobId"])
 
 
 if __name__ == "__main__":

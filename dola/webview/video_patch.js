@@ -23,9 +23,26 @@
     param.duration = TARGET_DURATION;
     if (TARGET_RATIO) {
       param.ratio = TARGET_RATIO;
-      if ("aspect_ratio" in param) param.aspect_ratio = TARGET_RATIO;
-      if ("video_ratio" in param) param.video_ratio = TARGET_RATIO;
+      // Dola has used several aliases across web builds. Unknown fields are
+      // ignored, while the active alias receives the requested value.
+      param.aspect_ratio = TARGET_RATIO;
+      param.video_ratio = TARGET_RATIO;
+      param.aspectRatio = TARGET_RATIO;
+      param.videoRatio = TARGET_RATIO;
+      param.image_ratio = TARGET_RATIO;
+      param.output_ratio = TARGET_RATIO;
     }
+    window.__dolaCliLastVideoAbilityParam = {
+      duration: param.duration,
+      model: param.model || null,
+      ratio: param.ratio || null,
+      aspect_ratio: param.aspect_ratio || null,
+      video_ratio: param.video_ratio || null,
+      aspectRatio: param.aspectRatio || null,
+      videoRatio: param.videoRatio || null,
+      image_ratio: param.image_ratio || null,
+      output_ratio: param.output_ratio || null,
+    };
     return true;
   }
 
@@ -82,6 +99,7 @@
         duration: TARGET_DURATION,
         model: TARGET_MODEL || null,
         ratio: TARGET_RATIO || null,
+        abilityParam: window.__dolaCliLastVideoAbilityParam || null,
       };
       return { changed: true, body: JSON.stringify(payload) };
     }

@@ -59,6 +59,8 @@ node src\cli.js video generate `
 # Inspect scheduler state
 node src\cli.js pool status --json
 node src\cli.js jobs list --limit 20 --json
+node src\cli.js jobs list --all --limit 20 --json
+node src\cli.js jobs prune --older-than 30d --json
 node src\cli.js jobs cancel <jobId> --json
 node src\cli.js jobs cleanup --request-prefix angle- --yes --json
 node src\cli.js worker status --json
@@ -136,7 +138,7 @@ Pipeline (same intent as desktop reseller tools):
 | `--video-gen` | Enable video mode + download |
 | `--duration 5\|10\|15` | Length only (default `5`) |
 | `--model seedance_v2.0` | Override model (auto for 15s) |
-| `--aspect-ratio 16:9` | Size/ratio (UI + completion patch) |
+| `--aspect-ratio 16:9` | Ratio: 9:16, 16:9, 1:1, 3:4, 4:3, or 21:9 |
 | `--reference-image` / `--file` | Repeatable, **0–n** refs |
 
 ```powershell

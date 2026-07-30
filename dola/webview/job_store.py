@@ -36,7 +36,9 @@ DEFAULT_COOKIE_POOL = Path(os.environ.get("DOLA_ACCOUNT_POOL") or r"G:\cookies\d
 SHANGHAI = timezone(timedelta(hours=8))
 DAILY_LIMIT = 4
 DURATION_COST = {5: 1, 10: 2, 15: 3}
+ALLOWED_ASPECT_RATIOS = ("9:16", "16:9", "1:1", "3:4", "4:3", "21:9")
 TERMINAL_STATES = {"succeeded", "failed", "timed_out", "needs_review", "cancelled"}
+PRUNABLE_STATES = {"cancelled", "failed", "timed_out"}
 
 
 def pid_alive(pid: int) -> bool:
@@ -110,6 +112,15 @@ def credit_cost(duration: int) -> int:
     if duration not in DURATION_COST:
         raise ValueError("duration must be one of 5, 10, or 15")
     return DURATION_COST[duration]
+
+
+def normalize_aspect_ratio(value: str) -> str:
+    ratio = str(value or "").strip().replace("/", ":")
+    if ratio not in ALLOWED_ASPECT_RATIOS:
+        raise ValueError(
+            "aspect ratio must be one of " + ", ".join(ALLOWED_ASPECT_RATIOS)
+        )
+    return ratio
 
 
 def clean_vid(value: Any) -> str:
@@ -366,6 +377,7 @@ class JobStore:
             raise ValueError("prompt is required")
         duration = int(duration)
         cost = credit_cost(duration)
+        aspect_ratio = normalize_aspect_ratio(aspect_ratio)
         if duration >= 15 and not model:
             model = "seedance_v2.0"
         request_id = str(request_id or "").strip()
@@ -699,10 +711,108 @@ class JobStore:
             raise KeyError(job_id)
         return self._public(row)
 
-    def list_jobs(self, limit: int = 50) -> list[dict]:
+    def list_jobs(
+        self,
+        limit: int = 20,
+        *,
+        states: Iterable[str] | None = None,
+        include_cancelled: bool = False,
+    ) -> list[dict]:
+        selected_states = [str(item) for item in (states or []) if str(item)]
+        params: list[Any] = []
+        sql = "SELECT * FROM jobs"
+        if selected_states:
+            unknown = set(selected_states) - (
+                TERMINAL_STATES
+                | {"queued", "reserved", "submitting", "running", "generated_pending_download"}
+            )
+            if unknown:
+                raise ValueError(f"unknown job states: {', '.join(sorted(unknown))}")
+            placeholders = ",".join("?" for _ in selected_states)
+            sql += f" WHERE state IN ({placeholders})"
+            params.extend(selected_states)
+        elif not include_cancelled:
+            sql += " WHERE state <> 'cancelled'"
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(max(1, min(limit, 500)))
         with self.connect() as con:
-            rows = con.execute("SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (max(1, min(limit, 500)),)).fetchall()
+            rows = con.execute(sql, params).fetchall()
         return [self._public(row) for row in rows]
+
+    def prune_jobs(
+        self,
+        *,
+        older_than_seconds: int,
+        states: Iterable[str] = ("cancelled", "failed", "timed_out"),
+        apply: bool = False,
+        delete_files: bool = True,
+    ) -> dict:
+        """Preview or remove old non-success terminal jobs and their artifacts."""
+        selected_states = sorted({str(item) for item in states if str(item)})
+        unknown = set(selected_states) - PRUNABLE_STATES
+        if unknown or not selected_states:
+            raise ValueError(
+                "prune states must be one or more of " + ", ".join(sorted(PRUNABLE_STATES))
+            )
+        seconds = int(older_than_seconds)
+        if seconds < 0:
+            raise ValueError("older-than must not be negative")
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=seconds)).isoformat(timespec="milliseconds")
+        placeholders = ",".join("?" for _ in selected_states)
+        with self.connect() as con:
+            rows = con.execute(
+                f"""
+                SELECT * FROM jobs
+                WHERE state IN ({placeholders})
+                  AND COALESCE(completed_at,updated_at,created_at) < ?
+                ORDER BY created_at,job_id
+                LIMIT 5000
+                """,
+                [*selected_states, cutoff],
+            ).fetchall()
+        jobs = [dict(row) for row in rows]
+        result = {
+            "dryRun": not apply,
+            "cutoff": cutoff,
+            "states": selected_states,
+            "matchedCount": len(jobs),
+            "deletedCount": 0,
+            "deletedFilesCount": 0,
+            "fileErrors": [],
+            "jobs": [self._public(row) for row in jobs],
+        }
+        if not apply or not jobs:
+            return result
+
+        removable_ids: list[str] = []
+        for job in jobs:
+            job_id = str(job["job_id"])
+            output_dir = Path(str(job.get("output_dir") or ""))
+            if delete_files and output_dir.exists():
+                request_file = output_dir / "request.json"
+                try:
+                    request = json.loads(request_file.read_text(encoding="utf-8"))
+                    if output_dir.name != job_id or request.get("jobId") != job_id:
+                        raise ValueError("job directory identity check failed")
+                    shutil.rmtree(output_dir)
+                    result["deletedFilesCount"] += 1
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    result["fileErrors"].append(
+                        {"jobId": job_id, "outputDir": str(output_dir), "error": str(exc)}
+                    )
+                    continue
+            removable_ids.append(job_id)
+
+        if removable_ids:
+            placeholders = ",".join("?" for _ in removable_ids)
+            with self.connect() as con:
+                con.execute("BEGIN IMMEDIATE")
+                con.execute(f"DELETE FROM account_leases WHERE job_id IN ({placeholders})", removable_ids)
+                con.execute(f"DELETE FROM job_events WHERE job_id IN ({placeholders})", removable_ids)
+                con.execute(f"DELETE FROM jobs WHERE job_id IN ({placeholders})", removable_ids)
+                con.commit()
+            result["deletedCount"] = len(removable_ids)
+        return result
 
     def cancel(self, job_id: str, reason: str = "cancelled by user") -> dict:
         """Cancel one job and refund only an unconfirmed credit reservation."""

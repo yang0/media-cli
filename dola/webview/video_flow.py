@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from login_flow import js_eval
+from job_store import normalize_aspect_ratio
 
 LogFn = Callable[[str], None]
 ROOT = Path(__file__).resolve().parent
@@ -103,6 +104,130 @@ JS_CLICK_VIDEO = r"""
   return { ok: true, text: item.t };
 })()
 """
+
+
+def select_video_ui_option(
+    window,
+    *,
+    control_keys: list[str],
+    value: str,
+    log: Optional[LogFn] = None,
+) -> bool:
+    """Select a native Dola video option so SPA state matches the API patch."""
+    keys_json = json.dumps([str(item) for item in control_keys])
+    value_json = json.dumps(str(value))
+    trigger_js = r"""
+(() => {
+  const keys = %KEYS%;
+  const visible = el => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+  };
+  const text = el => String(el && (el.innerText || el.textContent || el.getAttribute('aria-label') || el.title) || '').replace(/\s+/g, ' ').trim();
+  let el = null;
+  for (const key of keys) {
+    el = document.querySelector(`[data-input-engine-actionbar-control-key="${key}"]`);
+    if (visible(el)) break;
+    el = null;
+  }
+  if (!el) {
+    const ratios = /^(16:9|9:16|1:1|3:4|4:3|21:9)(\s|$)/;
+    el = Array.from(document.querySelectorAll('button, [role="button"]'))
+      .filter(visible)
+      .filter(node => ratios.test(text(node)))
+      .sort((a, b) => b.getBoundingClientRect().y - a.getBoundingClientRect().y)[0] || null;
+  }
+  if (!el) return { ok: false, reason: 'trigger-missing' };
+  try { el.scrollIntoView({ block: 'center' }); } catch (_) {}
+  try { el.focus(); } catch (_) {}
+  const mouse = { bubbles: true, cancelable: true, view: window, buttons: 1 };
+  try { el.dispatchEvent(new PointerEvent('pointerdown', mouse)); } catch (_) {}
+  try { el.dispatchEvent(new MouseEvent('mousedown', mouse)); } catch (_) {}
+  try { el.dispatchEvent(new PointerEvent('pointerup', mouse)); } catch (_) {}
+  try { el.dispatchEvent(new MouseEvent('mouseup', mouse)); } catch (_) {}
+  el.click();
+  return { ok: true, text: text(el), key: el.getAttribute('data-input-engine-actionbar-control-key') || '' };
+})()
+""".replace("%KEYS%", keys_json)
+    trigger = js_eval(window, trigger_js)
+    _log(log, f"video option trigger value={value}: {trigger}")
+    if not (isinstance(trigger, dict) and trigger.get("ok")):
+        return False
+    time.sleep(1.0)
+
+    option_js = r"""
+(() => {
+  const wanted = %VALUE%.replace(/\s+/g, '').toLowerCase();
+  const visible = el => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+  };
+  const text = el => String(el && (el.innerText || el.textContent || el.getAttribute('aria-label') || el.title) || '').replace(/\s+/g, '').toLowerCase();
+  const nodes = Array.from(document.querySelectorAll(
+    '[role="option"], [role="menuitem"], [role="menuitemradio"], [data-radix-collection-item], button, label'
+  )).filter(visible);
+  const closestClickable = el => {
+    for (let cur = el; cur && cur !== document.body; cur = cur.parentElement) {
+      const role = cur.getAttribute && (cur.getAttribute('role') || '');
+      if (cur.tagName === 'BUTTON' || /^(option|menuitem|menuitemradio)$/.test(role)
+        || cur.hasAttribute('data-radix-collection-item') || cur.tabIndex >= 0
+        || /pointer/.test(String(getComputedStyle(cur).cursor || ''))) return cur;
+    }
+    return el && el.parentElement;
+  };
+  // Some Dola builds render ratio rows as plain div/span elements without ARIA
+  // roles. Add only exact ratio text nodes instead of scanning every page div.
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const raw = String(walker.currentNode.nodeValue || '').replace(/\s+/g, '').toLowerCase();
+    if (raw !== wanted) continue;
+    const clickable = closestClickable(walker.currentNode.parentElement);
+    if (visible(clickable) && !nodes.includes(clickable)) nodes.push(clickable);
+  }
+  const matches = nodes
+    .map(el => {
+      const role = el.getAttribute('role') || '';
+      const isMenuOption = /^(option|menuitem|menuitemradio)$/.test(role)
+        || el.hasAttribute('data-radix-collection-item');
+      const isTrigger = el.hasAttribute('data-input-engine-actionbar-control-key');
+      return { el, t: text(el), r: el.getBoundingClientRect(), isMenuOption, isTrigger };
+    })
+    .filter(item => item.t === wanted || item.t.startsWith(wanted))
+    .sort((a, b) => {
+      const ae = a.t === wanted ? 1 : 0;
+      const be = b.t === wanted ? 1 : 0;
+      const ap = (a.isMenuOption ? 2 : 0) - (a.isTrigger ? 2 : 0);
+      const bp = (b.isMenuOption ? 2 : 0) - (b.isTrigger ? 2 : 0);
+      return (bp - ap) || (be - ae) || ((a.r.width * a.r.height) - (b.r.width * b.r.height));
+    });
+  const item = matches[0];
+  if (!item) return {
+    ok: false,
+    reason: 'option-missing',
+    sample: nodes.map(text).filter(Boolean).filter(t => t.length < 30).slice(-20)
+  };
+  try { item.el.scrollIntoView({ block: 'nearest' }); } catch (_) {}
+  try { item.el.focus(); } catch (_) {}
+  const mouse = { bubbles: true, cancelable: true, view: window, buttons: 1 };
+  try { item.el.dispatchEvent(new PointerEvent('pointerdown', mouse)); } catch (_) {}
+  try { item.el.dispatchEvent(new MouseEvent('mousedown', mouse)); } catch (_) {}
+  try { item.el.dispatchEvent(new PointerEvent('pointerup', mouse)); } catch (_) {}
+  try { item.el.dispatchEvent(new MouseEvent('mouseup', mouse)); } catch (_) {}
+  item.el.click();
+  return { ok: true, text: item.t };
+})()
+""".replace("%VALUE%", value_json)
+    selected = js_eval(window, option_js)
+    _log(log, f"video option select value={value}: {selected}")
+    if not (isinstance(selected, dict) and selected.get("ok")):
+        js_eval(window, "(() => { try { document.body.click(); } catch (_) {} return true; })()")
+        return False
+    time.sleep(0.5)
+    return True
 
 
 def js_attach_files_b64(files: list[dict]) -> str:
@@ -396,7 +521,7 @@ def run_video_generation(
     duration = int(duration)
     if duration not in (5, 10, 15):
         raise ValueError("duration must be 5, 10, or 15")
-    ratio = (aspect_ratio or "").strip().replace("/", ":")
+    ratio = normalize_aspect_ratio(aspect_ratio)
     if not model and duration >= 15:
         model = "seedance_v2.0"
     refs = list(ref_paths or [])
@@ -495,6 +620,27 @@ def run_video_generation(
         _log(log, f"video-btn sample labels: {(r1 or {}).get('sample')}")
     time.sleep(2.0)
 
+    # Current Dola builds also honor ratio state held by the native control.
+    # Align the SPA state with the completion request before attaching refs.
+    ratio_ui_ok = False
+    ratio_keys = ["video-ratio", "video-aspect-ratio", "aspect-ratio", "ratio"]
+    for ratio_attempt in range(1, 4):
+        ratio_ui_ok = select_video_ui_option(
+            window,
+            control_keys=ratio_keys,
+            value=ratio,
+            log=log,
+        )
+        if ratio_ui_ok:
+            break
+        _log(log, f"aspect ratio UI retry={ratio_attempt}/3 requested={ratio}")
+        time.sleep(0.8)
+    _log(log, f"aspect ratio UI selected={ratio_ui_ok} requested={ratio}")
+    if ratio and not ratio_ui_ok:
+        raise RuntimeError(
+            f"could not confirm aspect ratio {ratio} in Dola UI; request was not submitted"
+        )
+
     # Step 2: attach 0-n images (DataTransfer — no CDP)
     _log(log, f">>> step2: attach refs count={len(refs)}")
     if refs:
@@ -569,6 +715,11 @@ def run_video_generation(
         _log(log, f"send-state after click: {st2}")
         if isinstance(st2, dict) and int(st2.get("promptLen") or 0) < max(8, len(prompt) // 3):
             _log(log, "composer cleared — submit accepted")
+            patch_state = js_eval(
+                window,
+                "(() => window.__dolaCliLastVideoPatch || { patched: false })()",
+            )
+            _log(log, f"completion patch applied: {patch_state}")
             submitted = True
             try:
                 session_url = str(window.get_current_url() or "")

@@ -349,13 +349,16 @@ class Worker:
                 if not recovered_path.is_file():
                     recovered_path = None
             if recovered_path is None:
+                deterministic_ui_error = "could not confirm aspect ratio" in (tail or "")
                 self.store.fail(
                     job_id,
                     tail or f"inject shell exited {process.returncode}",
                     state="timed_out" if timed_out else (
                         "generated_pending_download" if generated_event else ("needs_review" if submitted else "failed")
                     ),
-                    retry=not submitted,
+                    # UI selector/configuration failures are independent of
+                    # account health. Do not flash through another profile.
+                    retry=not submitted and not deterministic_ui_error,
                 )
                 return
 
