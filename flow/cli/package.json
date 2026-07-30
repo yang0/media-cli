@@ -1,15 +1,15 @@
 {
   "name": "flow-cli",
   "version": "1.0.0",
-  "description": "CLI for Google Flow image generation via Chrome DevTools Protocol",
+  "description": "CLI for Google Flow image and image-to-video generation via Chrome DevTools Protocol",
   "main": "flow.mjs",
   "bin": {
     "flow-cli": "./flow.mjs"
   },
   "scripts": {
-    "test": "node flow.mjs \"一个小女孩在森林里走路\""
+    "test": "node flow.mjs --port 9221 \"一个小女孩在森林里走路\""
   },
-  "keywords": ["google-flow", "cdp", "puppeteer", "image-generation"],
+  "keywords": ["google-flow", "cdp", "puppeteer", "image-generation", "image-to-video"],
   "author": "",
   "license": "ISC",
   "type": "module",
