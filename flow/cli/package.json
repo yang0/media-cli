@@ -7,6 +7,8 @@
     "flow-cli": "./flow.mjs"
   },
   "scripts": {
+    "help": "node flow.mjs --help",
+    "demo": "node flow.mjs --help",
     "test": "node flow.mjs --port 9221 \"一个小女孩在森林里走路\""
   },
   "keywords": ["google-flow", "cdp", "puppeteer", "image-generation", "image-to-video"],
