@@ -1,4 +1,4 @@
-import { DEFAULT_ACCOUNT_POOL, DEFAULT_CDP, DEFAULT_OUT_DIR, DEFAULT_SESSION, DEFAULT_SESSION_STATE, DEFAULT_VIDEO_DURATION, DOLA_CHAT_HOME, VIDEO_MODEL_SEEDANCE_V2 } from './config.js';
+import { ALLOWED_VIDEO_DURATIONS, DEFAULT_ACCOUNT_POOL, DEFAULT_CDP, DEFAULT_OUT_DIR, DEFAULT_SESSION, DEFAULT_SESSION_STATE, DEFAULT_VIDEO_DURATION, DOLA_CHAT_HOME } from './config.js';
 
 function legacyUsage() {
   console.log(`dola-cli
@@ -7,10 +7,10 @@ Submit a message, optionally with local image/file attachments, to Dola chat
 through an existing Chrome session exposed on CDP port 9221.
 
 Usage:
-  dola video submit --prompt <text> --duration 15 --file <reference.webp> --json
+  dola video submit --prompt <text> --duration 10 --file <reference.webp> --json
   dola video status <jobId> --json
   dola video wait <jobId> --timeout 35m --json
-  dola video generate --prompt <text> --duration 15 --wait --json
+  dola video generate --prompt <text> --duration 10 --wait --json
   dola video download <jobId> --out <directory> --json
   dola jobs list
   dola pool status
@@ -19,7 +19,7 @@ Usage:
   dola --new-chat --prompt <text> [options]
   dola --new-chat --batch-prompt-file <path> [options]
   dola --video-gen --prompt <text> [options]
-  dola --video-gen --duration 15 --prompt <text> --out .\\downloads
+  dola --video-gen --duration 10 --prompt <text> --out .\\downloads
 
 Prerequisites:
   Legacy chat/image mode:
@@ -32,13 +32,13 @@ Durable video jobs:
   Video subcommands use a SQLite queue and isolated WebView profiles. submit starts
   a hidden worker automatically, returns a jobId immediately, and supports
   --request-id for idempotency. Each account may run only one job at a time.
-  Default global concurrency is 3. Daily cost: 5s=1 credit, 10s=2, 15s=3.
+  Default global concurrency is 3. Daily cost: 5s=1 credit, 10s=2.
   Artifacts are saved under cli/downloads/jobs/<date>/<jobId>/.
 
 Durable video demos (PowerShell):
   # Submit asynchronously; save the returned jobId
   dola video submit --prompt "A paper boat sailing through rain" \`
-    --duration 15 --aspect-ratio 9:16 --file E:\\temp\\avatar.webp \`
+    --duration 10 --aspect-ratio 9:16 --file E:\\temp\\avatar.webp \`
     --request-id demo-video-001 --json
 
   # Query, wait, and copy the exact job's video
@@ -48,7 +48,7 @@ Durable video demos (PowerShell):
 
   # Synchronous convenience form (submit + wait + download)
   dola video generate --prompt "A girl turns toward the camera" \`
-    --duration 15 --file E:\\temp\\avatar.webp --wait --json
+    --duration 10 --file E:\\temp\\avatar.webp --wait --json
 
   # Pool and worker operations
   dola pool status --json
@@ -100,9 +100,9 @@ Options:
   --image-gen              Enable Dola image generation and download images from the last reply only.
   --video-gen              Enable Dola video generation and download videos from the last reply only.
                            Flow (like reseller): 视频生成 → attach 0–n refs → prompt → send.
-                           15s uses POST /chat/completion patch (ability_type=17 + seedance_v2.0).
-  --duration <seconds>     Video duration: 5, 10, or 15 only (default: 5).
-  --model <name>           Video model override (default: seedance_v2.0 when duration is 15).
+                           Uses the durable account-pool worker and external HTTP submit path.
+  --duration <seconds>     Video duration: 5, 10, or 15 (default: 5).
+  --model <name>           Optional model label (ignored for completion rewrite; kept for metadata).
   --aspect-ratio <ratio>   9:16, 16:9, 1:1, 3:4, 4:3, or 21:9.
   --out <path>             Image download directory. Default: ${DEFAULT_OUT_DIR}
   --count <n>              Number of images to download. Default: 1
@@ -134,6 +134,7 @@ export function usage() {
   console.log(`dola-cli
 
 Commands:
+  dola --help                 Show this help (works from any directory after npm install -g).
   dola video submit ...       Queue a video and return a jobId immediately.
   dola video status <id>      Print one job as JSON.
   dola video wait <id>        Wait for generation/download to finish.
@@ -145,12 +146,18 @@ Commands:
   dola jobs cancel <id>       Cancel one job and release unsubmitted credits.
   dola jobs cleanup --yes     Cancel unsubmitted pending jobs and release leases.
   dola pool status            Show daily credits, reservations, and busy accounts.
+  dola pool test-chat         Test cookie accounts in isolated Chrome profiles.
   dola worker start           Start the hidden worker (default concurrency: 3).
   dola worker status|stop     Inspect or stop the worker.
   dola account open <id>      Open that account's isolated WebView.
+  dola account import ...     WebView login + cookie/fingerprint import (dola-free style).
+  dola account capture ...    Capture /chat/completion protocol template for HTTP video.
+  dola account list|show      Free-protocol account registry status.
 
 Durable video rules:
-  - Daily credits: 5s=1, 10s=2, 15s=3; each account has 4 credits/day.
+  - Daily credits: 5s=1, 10s=2, 15s=3; each account has 4 credits/day (Asia/Shanghai).
+  - Default duration is 5s. Pass --duration 15 explicitly for Seedance 15s.
+  - Submit is external HTTP; result pages open read-only for no-watermark downloads.
   - One account/profile runs at most one job; global default concurrency is 3.
   - submit reserves credits atomically; confirmed submission converts them to spent.
   - A confirmed job is never submitted again after a timeout or worker restart.
@@ -158,26 +165,40 @@ Durable video rules:
     SHA-256, and video under cli/downloads/jobs/<date>/<jobId>/.
 
 Video demos (PowerShell):
+  # Install globally once, then run dola from any directory
+  npm install -g E:\\projectHome\\media-cli\\dola
+  dola pool status --json
+
   # Async: copy the returned jobId into the next commands
   dola video submit --prompt "A paper boat sailing through rain" \`
-    --duration 15 --aspect-ratio 9:16 --file E:\\temp\\avatar.webp \`
+    --duration 15 --aspect-ratio 9:16 \`
     --request-id demo-video-001 --json
   dola video status <jobId> --json
   dola video wait <jobId> --timeout 35m --json
   dola video download <jobId> --out E:\\videos --json
 
+  # Prompt file + reference image (UTF-8 prompt file)
+  dola video submit --prompt-file E:\\projectHome\\seedance-prompts\\prompt.txt \`
+    --duration 15 --aspect-ratio 9:16 --file E:\\temp\\avatar.webp --json
+
   # Sync convenience form
   dola video generate --prompt "A girl turns toward the camera" \`
-    --duration 15 --file E:\\temp\\avatar.webp --wait --json
+    --duration 5 --aspect-ratio 16:9 --file E:\\temp\\avatar.webp --json
 
   # Pool / worker inspection
   dola pool status --json
+  dola pool test-chat --limit 3 --json
+  dola pool test-chat --account dola_example --timeout 60000 --json
   dola jobs list --limit 20 --json
   dola jobs list --state cancelled --json
   dola jobs prune --older-than 30d --json
   dola jobs prune --older-than 30d --yes --json
   dola jobs cleanup --request-prefix angle- --yes --json
   dola worker status --json
+
+  # Remove stale unsubmitted jobs after a WebView was closed
+  dola jobs cleanup --yes --json
+  dola jobs prune --older-than 30d --yes --json
 
   # Re-open a manually closed account WebView (profile and cookies are reused)
   dola account open AureliaBronson1l5hd
@@ -186,19 +207,25 @@ Video demos (PowerShell):
   dola video submit --prompt "Same request" --duration 5 \`
     --request-id external-request-42 --json
 
+JSON contract for automation:
+  video submit/status/wait/download return stable fields including jobId, state,
+  accountId, duration, creditCost, prompt, createdAt/submittedAt/completedAt,
+  messageId, vid, outputFile, manifestFile and error. Use request-id to make
+  retries idempotent; omit it when every submission should create a new job.
+
 Legacy CDP examples:
   dola --session "${DEFAULT_SESSION}" --dry-run
   dola --new-chat --image-gen --prompt "A green circle app icon" --out .\\downloads
   dola --file E:\\temp\\reference.png --prompt "Describe this image"
   dola --new-chat --batch-prompt-file .\\prompts.txt --out .\\downloads
-  dola --video-gen --duration 15 --prompt "A cinematic drone shot" --out .\\downloads
+  dola --video-gen --duration 10 --prompt "A cinematic drone shot" --out .\\downloads
 
 Options:
   --account-pool <path>    Cookie directory/JSON pool. Default: ${DEFAULT_ACCOUNT_POOL}
   --account-id <id>        Prefer one account in legacy mode.
   --prompt <text>          Prompt text; use --prompt-file for UTF-8 files.
   --file <path>             Reference file; repeat for multiple references.
-  --duration 5|10|15       Video length; 15s defaults to seedance_v2.0.
+  --duration 5|10|15       Video length via external task submission (default: 5).
   --aspect-ratio <ratio>   9:16, 16:9, 1:1, 3:4, 4:3, or 21:9.
   --model <name>            Override the video model.
   --request-id <id>         Idempotency key for video submit.
@@ -302,19 +329,16 @@ export function parseArgs(argv) {
   if (args.videoGen) {
     if (args.duration === undefined) args.duration = DEFAULT_VIDEO_DURATION;
     const duration = Number(args.duration);
-    const allowed = new Set([5, 10, 15]);
+    const allowed = new Set(ALLOWED_VIDEO_DURATIONS);
     if (!Number.isFinite(duration) || !allowed.has(Math.round(duration))) {
-      throw new Error("--duration must be one of 5, 10, or 15 seconds.");
+      throw new Error("--duration must be 5, 10, or 15 seconds.");
     }
     args.duration = String(Math.round(duration));
     args.durationSeconds = Math.round(duration);
     if (args.model !== undefined) {
       const model = String(args.model || "").trim();
-      if (!model) throw new Error("--model must be a non-empty model id (example: seedance_v2.0).");
+      if (!model) throw new Error("--model must be a non-empty model id when provided.");
       args.model = model;
-    } else if (args.durationSeconds >= 15) {
-      // Reseller tool: 15s only with Seedance v2 on ability_type=17.
-      args.model = VIDEO_MODEL_SEEDANCE_V2;
     }
     // Normalize empty file list (0 refs is valid).
     if (!Array.isArray(args.files)) args.files = [];
@@ -328,9 +352,9 @@ export function parseArgs(argv) {
   }
   // Dola normally finishes video generation in 1-5 minutes. Keep the image
   // default for existing commands, while giving video jobs a practical window.
-  // 15s Seedance jobs often need longer than short 5s clips.
+  // 10s jobs need a bit longer than short 5s clips.
   if (args.videoGen && args.timeout === 120000) {
-    args.timeout = args.durationSeconds >= 15 ? 600000 : 360000;
+    args.timeout = args.durationSeconds >= 10 ? 480000 : 360000;
   }
   if (args.resume && !args.batchPromptFile) throw new Error("--resume requires --batch-prompt-file.");
   return args;
