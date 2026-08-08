@@ -1,0 +1,34 @@
+{
+  "name": "volc-tts",
+  "version": "1.0.1",
+  "description": "火山引擎口播稿转音频+字幕 CLI（media-cli 平台）- seed-tts-2.0 TTS + seedasr ASR，多语种对齐",
+  "bin": {
+    "volc-tts": "./src/cli.ts"
+  },
+  "files": [
+    "src/"
+  ],
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "doctor": "bun run src/cli.ts doctor"
+  },
+  "keywords": [
+    "volcengine",
+    "tts",
+    "asr",
+    "subtitle",
+    "speech",
+    "seed-tts",
+    "火山引擎",
+    "配音"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.0.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.0.0",
+    "typescript": "^5.0.0"
+  }
+}
