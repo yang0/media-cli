@@ -20,4 +20,6 @@ _tmp*/
 
 # dola 临时探测/工作文件（含密钥风险）
 dola/webview/_*/
+dola/webview/_*.py
+dola/webview/_**
 **/_upload_probe/
