@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "jobId": "12091961c9624c709aa3991c1baae8cf",
+  "prompt": "一只小猫在窗边晒太阳，镜头缓慢推进",
+  "accountId": "DaiseyDuncanbdeuv",
+  "duration": 5,
+  "creditCost": 1,
+  "aspectRatio": "9:16",
+  "model": "",
+  "createdAt": "2026-08-03T13:21:15.638+00:00",
+  "submittedAt": "2026-08-03T13:21:20.926+00:00",
+  "completedAt": "2026-08-03T13:23:52.582+00:00",
+  "sessionUrl": "https://www.dola.com/chat/38416197826242833",
+  "messageId": "1259180305752849",
+  "vid": "v186a3gm000cd9o9cinog65oa73n643g",
+  "sourceUrl": "",
+  "outputFile": "E:\\projectHome\\media-cli\\dola\\downloads\\jobs\\2026-08-03\\12091961c9624c709aa3991c1baae8cf\\12091961c9624c709aa3991c1baae8cf.mp4",
+  "size": 540925,
+  "sha256": "e2ec5233517404fba778c7208ac0e0ff7563e16538f3c512cff48fa930334e12",
+  "references": [],
+  "manifestFile": "E:\\projectHome\\media-cli\\dola\\downloads\\jobs\\2026-08-03\\12091961c9624c709aa3991c1baae8cf\\result.json"
+}

@@ -13,6 +13,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { basename, extname, join, resolve } from 'node:path';
 import {
   connectChatGPT,
+  sendOnce,
+  waitImage,
+  downloadImage,
   generateOnce,
 } from './chatgpt-image.mjs';
 
@@ -154,29 +157,72 @@ function collectBatchJobs(a) {
   return a.limit > 0 ? jobs.slice(0, a.limit) : jobs;
 }
 
-async function withRetry(port, retries, work) {
+/**
+ * 生成重试流程：先确认「确实没有生成图片」再重发 prompt。
+ * - 图已生成（检测晚/下载失败）→ 只重试下载，不重发
+ * - ChatGPT 返回文字（拒绝/说明）→ 确认未生成图 → 换新标签页重发
+ * - 无图无文本（可能仍在生成）→ 同标签页继续等待，不重发
+ */
+async function withRetry(port, retries, prompt, opts) {
   let session = await connectChatGPT(port);
+  let sent = false;
   try {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const result = await work(session.cdp, attempt);
-        if (result?.kind === 'text' && attempt < retries) {
-          console.warn(`[retry] 返回文字，换新标签页重试（${attempt}/${retries}）`);
+        if (!sent) {
+          await sendOnce(session.cdp, prompt);
+          sent = true;
+        }
+        const result = await waitImage(session.cdp, opts.waitSeconds);
+        if (result.kind === 'image') {
+          try {
+            const path = await downloadImage(session.cdp, result.url, opts.outDir, opts.basename);
+            return { kind: 'image', path, url: result.url };
+          } catch (e) {
+            // 图已生成，只是下载失败 → 不重发，下一轮直接重新下载
+            if (attempt >= retries) throw e;
+            console.warn(`[retry] 下载失败（${e.message}），图已生成，重新下载（${attempt}/${retries}）`);
+            sent = true; // 保持已发送状态，下一轮跳过 send，直接 wait→download
+          }
+          continue;
+        }
+        // result.kind === 'text'：ChatGPT 明确未生成图 → 换新标签页重发
+        if (attempt < retries) {
+          console.warn(`[retry] 返回文字而非图片，换新标签页重发（${attempt}/${retries}）`);
           session.cdp.close();
           session = await connectChatGPT(port, { newTab: true });
+          sent = false;
           continue;
         }
         return result;
       } catch (e) {
         if (attempt >= retries) throw e;
-        console.warn(`[retry] ${e.message}，换新标签页重试（${attempt}/${retries}）`);
-        session.cdp.close();
-        session = await connectChatGPT(port, { newTab: true });
+        // 等待超时等异常：先确认是否真的没生成图
+        const newImg = await session.cdp.evaluate('window.__cgi.newImg()').catch(() => null);
+        const newText = await session.cdp.evaluate('window.__cgi.newText()').catch(() => null);
+        if (newImg) {
+          // 图其实已生成（只是检测晚了）→ 不重发，下一轮直接下载
+          console.warn(`[retry] ${e.message}，但图已生成，直接进入下载（${attempt}/${retries}）`);
+          sent = true;
+          continue;
+        }
+        if (newText && !/生成|思考|处理|分析|请稍候|generating|thinking|loading/i.test(newText)) {
+          // ChatGPT 给了文字回复 → 确认未生成图 → 换新标签页重发
+          console.warn(`[retry] 收到文字回复，确认未生成图，换新标签页重发（${attempt}/${retries}）`);
+          session.cdp.close();
+          session = await connectChatGPT(port, { newTab: true });
+          sent = false;
+          continue;
+        }
+        // 无图无文本：可能仍在生成 → 同标签页继续等待，不重发
+        console.warn(`[retry] ${e.message}，确认无新图，同标签页继续等待（${attempt}/${retries}）`);
+        sent = true;
       }
     }
   } finally {
     session.cdp.close();
   }
+  throw new Error('重试次数用尽，仍未能获取图片');
 }
 
 async function cmdDryRun(a) {
@@ -197,13 +243,11 @@ async function cmdGenerate(a) {
   const name = a.name || `chatgpt-${new Date().toISOString().replace(/[:.]/g, '-')}`;
 
   console.log(`[generate] port=${a.port} out=${a.out} name=${name}`);
-  const result = await withRetry(a.port, a.retries, async (cdp) =>
-    generateOnce(cdp, prompt, {
-      outDir: a.out,
-      basename: name,
-      waitSeconds: a.wait,
-    }),
-  );
+  const result = await withRetry(a.port, a.retries, prompt, {
+    outDir: a.out,
+    basename: name,
+    waitSeconds: a.wait,
+  });
 
   if (result.kind === 'text') {
     console.error('[generate] ChatGPT 返回文字而非图片：');

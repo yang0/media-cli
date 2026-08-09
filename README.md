@@ -1,19 +1,20 @@
 # media-cli
 
-CLI collection for image and video generation through supported web services.
+CLI collection for image, video and audio generation through supported web services.
 
 Each platform is isolated and can be installed or run from its own `cli/` directory.
-Authentication is always supplied by the user through a logged-in Chrome CDP session or a local cookie file.
+Authentication is supplied by the user through a logged-in Chrome CDP session, a local cookie file, or an API key env var.
 
 ## Platforms
 
-| Platform | Images | Video | Entry point |
-|---|:---:|:---:|---|
-| Jimeng | Yes | Yes | `jimeng/cli` |
-| ChatGPT | Yes | No | `chatgpt/cli` |
-| Dola | Yes | Yes | `dola/cli` |
-| Doubao | Yes | No | `doubao/cli` |
-| Google Flow | Yes | No | `flow/cli` |
+| Platform | Images | Video | TTS/Audio | Entry point |
+|---|:---:|:---:|:---:|---|
+| Jimeng | Yes | Yes | No | `jimeng/cli` |
+| ChatGPT | Yes | No | No | `chatgpt/cli` |
+| Dola | Yes | Yes | No | `dola/cli` |
+| Doubao | Yes | No | No | `doubao/cli` |
+| Google Flow | Yes | No | No | `flow/cli` |
+| Volc-TTS | No | No | **Yes** | `volc-tts/cli` |
 
 ## Quick start
 

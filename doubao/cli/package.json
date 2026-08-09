@@ -1,14 +1,16 @@
 {
   "name": "doubao-img",
-  "version": "0.1.0",
-  "description": "Bun CLI that controls an existing Doubao browser session through Chrome CDP 9222 and downloads generated images.",
+  "version": "0.2.0",
+  "description": "Doubao tools: Chrome CDP image download + Volcengine Podcast TTS (websocket-v3 with timestamps).",
   "type": "module",
   "bin": {
-    "doubao-img": "./src/cli.js"
+    "doubao-img": "./src/cli.js",
+    "doubao-podcast": "./src/podcast/cli.mjs"
   },
   "scripts": {
     "check": "node --check src/cli.js",
-    "start": "bun src/cli.js"
+    "start": "bun src/cli.js",
+    "podcast": "bun src/podcast/cli.mjs"
   },
   "dependencies": {},
   "devDependencies": {

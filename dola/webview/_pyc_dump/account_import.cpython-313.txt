@@ -1,0 +1,383 @@
+# account_import.cpython-313.pyc filename=webview\free_protocol\account_import.py
+# co_names=('__doc__', '__future__', 'annotations', 'json', 'time', 'pathlib', 'Path', 'typing', 'Any', 'Callable', 'Optional', 'webview', 'cookie_util', 'filter_dola_related', 'has_session', 'load_cookies_from_webview2_profile', 'write_netscape', 'dola_webview', 'account_id_from_email', 'safe_account_id', 'session_ready', 'free_protocol.registry', 'AccountRecord', 'AccountRegistry', 'ClientProfile', 'ProtocolSnapshot', 'gui_lock', 'GuiBusyError', 'acquire_gui_lock', 'force_env', 'release_gui_lock', 'login_flow', 'js_eval', 'page_state', 'parse_accounts_file', 'run_google_login', 'str', 'LogFn', '__file__', 'resolve', 'parent', 'ROOT', 'SCRIPTS', 'read_text', 'CAPTURE_JS', 'is_file', 'CORE_JS', '_log', '_inject', '_read_capture', '_snapshot_client_profile', '_snapshot_protocol', '_export_cookies', 'import_account_interactive', 'capture_protocol', 'import_from_accounts_file')
+
+STR 'WebView2 account import (dola-free AddAccount style).\n\nCRITICAL — free-tool author rules:\n  - WebView is for LOGIN / viewing downloads only.\n  - NEVER submit video or chat replies inside the Dola window.\n  - In-window submit causes slider captcha and forced logout.\n  - Video tasks must be submitted via external HTTP (「提交15秒视频」).\n'
+STR 'scripts'
+STR 'protocol_capture.js'
+STR 'utf-8'
+STR 'dola_core.js'
+STR ''
+STR '[account_import] '
+<module>.NAME print
+<module>.VAR log
+<module>.VAR msg
+STR '('
+STR '(() => { '
+STR '\n; return true; })()'
+STR 'inject '
+STR ' failed: '
+<module>.NAME js_eval
+<module>.NAME strip
+<module>.NAME startswith
+<module>.NAME Exception
+<module>.NAME _log
+<module>.VAR window
+<module>.VAR script
+<module>.VAR log
+<module>.VAR label
+<module>.VAR exc
+STR '(() => ({ capture: window.__dolaProtocolCapture || null, profile: window.__dolaClientProfile || null, href: location.href }))()'
+<module>.NAME js_eval
+<module>.NAME isinstance
+<module>.NAME dict
+<module>.VAR window
+<module>.VAR data
+STR 'userAgent'
+STR ''
+STR 'language'
+STR 'zh-CN'
+STR 'platform'
+STR 'Win32'
+STR 'secChUa'
+STR 'secChUaPlatform'
+STR '"Windows"'
+STR 'secChUaMobile'
+STR '?0'
+STR 'webPlatform'
+STR 'web'
+STR 'doubaoDevicePlatform'
+STR 'clientPlatform'
+STR 'deviceId'
+STR 'webId'
+STR 'teaUuid'
+STR 'fp'
+STR 'region'
+STR 'sysRegion'
+STR 'runtimeVersion'
+STR 'chromiumVersion'
+STR 'timeZone'
+STR 'capturedAt'
+STR '%Y-%m-%dT%H:%M:%S'
+<module>.NAME ClientProfile
+<module>.NAME str
+<module>.NAME get
+<module>.NAME time
+<module>.NAME strftime
+<module>.VAR raw
+STR 'completion'
+STR 'url'
+STR 'https://www.dola.com/chat/completion'
+STR 'method'
+STR 'POST'
+STR 'headers'
+STR 'body'
+STR ''
+STR 'abilityTemplateJson'
+STR 'abilityParameterTemplateJson'
+STR 'textMessageTemplateJson'
+STR 'uploads'
+STR '%Y-%m-%dT%H:%M:%S'
+STR 'hasVideoAbility'
+STR 'hasDurationField'
+STR 'sampleDuration'
+STR 'sampleAspectRatio'
+STR 'page-intercept'
+<module>.NAME get
+<module>.NAME ProtocolSnapshot
+<module>.NAME str
+<module>.NAME dict
+<module>.NAME list
+<module>.NAME time
+<module>.NAME strftime
+<module>.NAME bool
+<module>.NAME int
+<module>.VAR capture
+<module>.VAR completion
+STR 'get_cookies failed: '
+STR 'exported cookies count='
+STR ' session='
+STR ' -> '
+STR 'no cookies exported'
+<module>.NAME get_cookies
+<module>.NAME cookie_util
+<module>.NAME expand_cookies
+<module>.NAME Exception
+<module>.NAME _log
+<module>.NAME has_session
+<module>.NAME filter_dola_related
+<module>.NAME load_cookies_from_webview2_profile
+<module>.NAME Path
+<module>.NAME profilePath
+<module>.NAME len
+<module>.NAME cookieCount
+<module>.NAME hasSession
+<module>.NAME cookieFile
+<module>.NAME cookie_path
+<module>.NAME accountId
+<module>.NAME write_netscape
+<module>.NAME str
+<module>.VAR window
+<module>.VAR record
+<module>.VAR registry
+<module>.VAR log
+<module>.VAR cookies
+<module>.VAR raw
+<module>.VAR expand_cookies
+<module>.VAR exc
+<module>.VAR related
+<module>.VAR cookie_path
+STR 'https://www.dola.com/chat'
+STR 'Open WebView profile for LOGIN ONLY, then export cookies + client profile.\n\nDo not type prompts or generate video in this window.\n'
+STR 'account-import:'
+STR 'window'
+STR '=== LOGIN ONLY — do NOT submit video/chat in this Dola window ==='
+STR 'After session is ready, window closes; use video generate (HTTP) outside.'
+STR ''
+STR '(() => location.href)()'
+STR 'webview ready href='
+STR 'chrome-error:'
+STR 'Dola load failed; retrying navigation'
+STR 'warmup '
+STR ': '
+STR 'Dola page did not load before login'
+STR 'error'
+STR 'protocol_capture'
+STR 'dola_core'
+STR 'auto-login email='
+<module>.import_account_interactive.after_start.NAME _log
+<module>.import_account_interactive.after_start.VAR message
+<module>.import_account_interactive.after_start.FREE log
+<module>.import_account_interactive.after_start.NAME session_ready
+<module>.import_account_interactive.after_start.FREE storage
+<module>.import_account_interactive.after_start.FREE window
+STR 'login failed at '
+STR 'registration-failed'
+STR '%Y-%m-%dT%H:%M:%S'
+STR 'wait session ready='
+STR ' page='
+STR 'timeout waiting for login session'
+STR 'protocol_capture_authenticated'
+STR 'profile'
+STR 'capture'
+STR 'completion'
+STR 'body'
+STR 'passive completion template observed (ok, not required)'
+STR 'ok'
+STR 'no-session'
+STR 'imported via WebView (login-only). Submit videos only via HTTP CLI.'
+STR 'session cookies missing'
+STR 'record'
+STR 'import done account='
+STR ' session='
+STR 'import failed: '
+<module>.import_account_interactive.NAME get
+<module>.import_account_interactive.NAME _log
+<module>.import_account_interactive.NAME range
+<module>.import_account_interactive.NAME evaluate_js
+<module>.import_account_interactive.NAME str
+<module>.import_account_interactive.NAME startswith
+<module>.import_account_interactive.NAME load_url
+<module>.import_account_interactive.NAME Exception
+<module>.import_account_interactive.NAME time
+<module>.import_account_interactive.NAME sleep
+<module>.import_account_interactive.NAME destroy
+<module>.import_account_interactive.NAME _inject
+<module>.import_account_interactive.NAME CAPTURE_JS
+<module>.import_account_interactive.NAME CORE_JS
+<module>.import_account_interactive.NAME run_google_login
+<module>.import_account_interactive.NAME ok
+<module>.import_account_interactive.NAME stage
+<module>.import_account_interactive.NAME message
+<module>.import_account_interactive.NAME dolaHealthStatus
+<module>.import_account_interactive.NAME dolaHealthMessage
+<module>.import_account_interactive.NAME strftime
+<module>.import_account_interactive.NAME lastImportAt
+<module>.import_account_interactive.NAME save
+<module>.import_account_interactive.NAME session_ready
+<module>.import_account_interactive.NAME page_state
+<module>.import_account_interactive.NAME _read_capture
+<module>.import_account_interactive.NAME _snapshot_client_profile
+<module>.import_account_interactive.NAME isinstance
+<module>.import_account_interactive.NAME dict
+<module>.import_account_interactive.NAME clientProfile
+<module>.import_account_interactive.NAME _snapshot_protocol
+<module>.import_account_interactive.NAME protocol
+<module>.import_account_interactive.NAME _export_cookies
+<module>.import_account_interactive.NAME hasSession
+<module>.import_account_interactive.VAR ready_href
+<module>.import_account_interactive.VAR i
+<module>.import_account_interactive.VAR href
+<module>.import_account_interactive.VAR href_text
+<module>.import_account_interactive.VAR exc
+<module>.import_account_interactive.VAR login_result
+<module>.import_account_interactive.VAR deadline
+<module>.import_account_interactive.VAR ready
+<module>.import_account_interactive.VAR st
+<module>.import_account_interactive.VAR snap
+<module>.import_account_interactive.VAR capture
+<module>.import_account_interactive.FREE account_id
+<module>.import_account_interactive.FREE auto_login
+<module>.import_account_interactive.FREE email
+<module>.import_account_interactive.FREE holder
+<module>.import_account_interactive.FREE log
+<module>.import_account_interactive.FREE password
+<module>.import_account_interactive.FREE record
+<module>.import_account_interactive.FREE registry
+<module>.import_account_interactive.FREE result_box
+<module>.import_account_interactive.FREE storage
+<module>.import_account_interactive.FREE timeout
+<module>.import_account_interactive.FREE url
+STR 'Dola LOGIN ONLY · '
+STR ' · 禁止在窗口内提交视频'
+STR 'window'
+STR 'error'
+STR 'record'
+STR 'import finished without record'
+<module>.NAME AccountRegistry
+<module>.NAME safe_account_id
+<module>.NAME load
+<module>.NAME displayName
+<module>.NAME str
+<module>.NAME profile_path
+<module>.NAME profilePath
+<module>.NAME cookie_path
+<module>.NAME cookieFile
+<module>.NAME Path
+<module>.NAME acquire_gui_lock
+<module>.NAME force_env
+<module>.NAME GuiBusyError
+<module>.NAME RuntimeError
+<module>.NAME webview
+<module>.NAME create_window
+<module>.NAME start
+<module>.NAME release_gui_lock
+<module>.NAME get
+<module>.VAR account_id
+<module>.VAR registry
+<module>.VAR url
+<module>.VAR email
+<module>.VAR password
+<module>.VAR auto_login
+<module>.VAR timeout
+<module>.VAR log
+<module>.VAR exc
+<module>.VAR after_start
+<module>.VAR window
+STR 'Refresh cookies + client fingerprint only.\n\nauto_video is IGNORED (and warned): free-tool author forbids in-window submit.\nCompletion templates are built/updated by external HTTP submit success.\n'
+STR 'WARNING: --auto-video is disabled. Never submit inside Dola window (captcha / forced logout). Use: free_protocol.cli video generate ...'
+STR ''
+STR '%Y-%m-%dT%H:%M:%S'
+STR 'session cookies ok; submit videos only via external HTTP (python -m free_protocol.cli video generate ...)'
+STR 'session ok for '
+STR '; no in-window capture needed'
+STR 'cookie read failed: '
+<module>.NAME _log
+<module>.NAME AccountRegistry
+<module>.NAME load
+<module>.NAME Path
+<module>.NAME profilePath
+<module>.NAME exists
+<module>.NAME str
+<module>.NAME profile_path
+<module>.NAME cookie_util
+<module>.NAME has_session
+<module>.NAME parse_netscape
+<module>.NAME filter_dola_related
+<module>.NAME cookieFile
+<module>.NAME cookie_path
+<module>.NAME is_file
+<module>.NAME hasSession
+<module>.NAME len
+<module>.NAME cookieCount
+<module>.NAME time
+<module>.NAME strftime
+<module>.NAME lastCaptureAt
+<module>.NAME dolaHealthMessage
+<module>.NAME save
+<module>.NAME Exception
+<module>.NAME import_account_interactive
+<module>.VAR account_id
+<module>.VAR registry
+<module>.VAR url
+<module>.VAR timeout
+<module>.VAR auto_video
+<module>.VAR auto_prompt
+<module>.VAR auto_duration
+<module>.VAR log
+<module>.VAR record
+<module>.VAR has_session
+<module>.VAR parse_netscape
+<module>.VAR filter_dola_related
+<module>.VAR cookie_path
+<module>.VAR cookies
+<module>.VAR exc
+STR '--index out of range 0..'
+<module>.NAME parse_accounts_file
+<module>.NAME str
+<module>.NAME len
+<module>.NAME SystemExit
+<module>.NAME account_id_from_email
+<module>.NAME import_account_interactive
+<module>.VAR accounts_file
+<module>.VAR index
+<module>.VAR kwargs
+<module>.VAR rows
+<module>.VAR email
+<module>.VAR password
+<module>.VAR account_id
+NAME __doc__
+NAME __future__
+NAME annotations
+NAME json
+NAME time
+NAME pathlib
+NAME Path
+NAME typing
+NAME Any
+NAME Callable
+NAME Optional
+NAME webview
+NAME cookie_util
+NAME filter_dola_related
+NAME has_session
+NAME load_cookies_from_webview2_profile
+NAME write_netscape
+NAME dola_webview
+NAME account_id_from_email
+NAME safe_account_id
+NAME session_ready
+NAME free_protocol.registry
+NAME AccountRecord
+NAME AccountRegistry
+NAME ClientProfile
+NAME ProtocolSnapshot
+NAME gui_lock
+NAME GuiBusyError
+NAME acquire_gui_lock
+NAME force_env
+NAME release_gui_lock
+NAME login_flow
+NAME js_eval
+NAME page_state
+NAME parse_accounts_file
+NAME run_google_login
+NAME str
+NAME LogFn
+NAME __file__
+NAME resolve
+NAME parent
+NAME ROOT
+NAME SCRIPTS
+NAME read_text
+NAME CAPTURE_JS
+NAME is_file
+NAME CORE_JS
+NAME _log
+NAME _inject
+NAME _read_capture
+NAME _snapshot_client_profile
+NAME _snapshot_protocol
+NAME _export_cookies
+NAME import_account_interactive
+NAME capture_protocol
+NAME import_from_accounts_file

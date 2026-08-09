@@ -1,14 +1,15 @@
 {
   "name": "dola-cli",
-  "version": "0.1.0",
-  "description": "Bun CLI for submitting text and image attachments to Dola chat through Chrome CDP.",
+  "version": "0.2.0",
+  "description": "CLI for Dola chat/image/video generation via Chrome CDP (modular ESM).",
   "type": "module",
   "bin": {
     "dola": "./src/cli.js"
   },
   "scripts": {
-    "check": "node --check src/cli.js",
-    "start": "bun src/cli.js"
+    "check": "node --check src/cli.js && node --check src/job-command.js && node --check src/main.js && node --check src/config.js && node --check src/cdp.js && node --check src/session.js && node --check src/args.js && node --check src/video/patch.js && node --check src/video/resolve.js && node --check src/accounts/pool.js",
+    "start": "node src/cli.js",
+    "split": "python scripts/split-modules.py"
   },
   "dependencies": {},
   "devDependencies": {}

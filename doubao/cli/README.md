@@ -1,4 +1,57 @@
-# doubao-img
+# doubao CLI
+
+Two tools in one package:
+
+1. **doubao-img** — Chrome CDP image download from a logged-in Doubao browser
+2. **doubao-podcast** — Volcengine Podcast TTS (websocket-v3) with per-round timestamps
+
+---
+
+## Podcast TTS (`doubao-podcast`)
+
+Docs: [播客 API websocket-v3](https://www.volcengine.com/docs/6561/1668014)
+
+Synthesizes dual-speaker podcast audio and returns:
+
+| File | Content |
+|------|---------|
+| `*.mp3` | Full concatenated audio |
+| `*.texts.json` | `taskId`, duration, each turn's `start`/`end`/`duration` + speaker |
+| `*.srt` | Subtitles with `[女]` / `[男]` labels |
+
+### Setup
+
+```bash
+cd E:\projectHome\media-cli\doubao\cli
+cp .env.example .env
+# fill DOUBAO_PODCAST_APP_ID / ACCESS_TOKEN / SECRET_KEY
+```
+
+### Run
+
+```bash
+# action=3: scripted dialogue (口播稿) — recommended
+bun src/podcast/cli.mjs ^
+  --text "女:今天我们聊适度宽松。\n男:好，我们开始。" ^
+  --out downloads/smoke.mp3
+
+# from JSON file: [{ "text":"...", "speaker":"zh_female_..." }, ...]
+bun src/podcast/cli.mjs --nlp-file script.json --out downloads/show.mp3
+
+# action=4: topic → auto podcast
+bun src/podcast/cli.mjs --action 4 --prompt "适度宽松货币政策" --out downloads/topic.mp3
+```
+
+Default speakers:
+
+- 女 `zh_female_mizaitongxue_v2_saturn_bigtts`
+- 男 `zh_male_dayixiansheng_v2_saturn_bigtts`
+
+Timestamps come from server event **362 PodcastRoundEnd** (`start_time` / `end_time` / `audio_duration`).
+
+---
+
+## Image download (`doubao-img`)
 
 Bun CLI for controlling an already logged-in Doubao browser through Chrome's CDP debug port, submitting a prompt, capturing generated image URLs, and downloading them locally.
 

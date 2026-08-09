@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "jobId": "6859173c38084802aa3b2f717268bf71",
+  "prompt": "一朵蓝色花在清晨微风中轻轻摇曳，近景镜头",
+  "accountId": "ShaniCurrynkc7o",
+  "duration": 5,
+  "creditCost": 1,
+  "aspectRatio": "9:16",
+  "model": "",
+  "createdAt": "2026-08-03T13:22:54.301+00:00",
+  "submittedAt": "2026-08-03T13:22:59.234+00:00",
+  "completedAt": "2026-08-03T13:25:27.795+00:00",
+  "sessionUrl": "https://www.dola.com/chat/38416093069755153",
+  "messageId": "1258678697346833",
+  "vid": "v186a3gm000cd9o9dbfog65t528unffg",
+  "sourceUrl": "",
+  "outputFile": "E:\\projectHome\\media-cli\\dola\\downloads\\jobs\\2026-08-03\\6859173c38084802aa3b2f717268bf71\\6859173c38084802aa3b2f717268bf71.mp4",
+  "size": 514324,
+  "sha256": "7b6e5151c6b9362569fbb40a0fba86a2ef4e35efe9947cc20f2917d0d4c62974",
+  "references": [],
+  "manifestFile": "E:\\projectHome\\media-cli\\dola\\downloads\\jobs\\2026-08-03\\6859173c38084802aa3b2f717268bf71\\result.json"
+}

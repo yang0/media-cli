@@ -1,0 +1,536 @@
+ 212            RESUME                   0
+
+ 222            LOAD_FAST                6 (depth)
+                LOAD_CONST               1 (24)
+                COMPARE_OP             148 (bool(>))
+                POP_JUMP_IF_TRUE         3 (to L1)
+                LOAD_FAST                0 (obj)
+                POP_JUMP_IF_NOT_NONE     1 (to L2)
+
+ 223    L1:     RETURN_CONST             0 (None)
+
+ 224    L2:     LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST                0 (obj)
+                LOAD_GLOBAL              2 (list)
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_FALSE       28 (to L5)
+
+ 225            LOAD_FAST                0 (obj)
+                GET_ITER
+        L3:     FOR_ITER                21 (to L4)
+                STORE_FAST               7 (item)
+
+ 226            LOAD_GLOBAL              5 (_patch_tree + NULL)
+
+ 227            LOAD_FAST                7 (item)
+
+ 228            LOAD_FAST                1 (prompt)
+
+ 229            LOAD_FAST                2 (duration)
+
+ 230            LOAD_FAST                3 (aspect_ratio)
+
+ 231            LOAD_FAST                4 (model)
+
+ 232            LOAD_FAST                5 (attachments)
+
+ 233            LOAD_FAST                6 (depth)
+                LOAD_CONST               2 (1)
+                BINARY_OP                0 (+)
+
+ 226            LOAD_CONST               3 (('prompt', 'duration', 'aspect_ratio', 'model', 'attachments', 'depth'))
+                CALL_KW                  7
+                POP_TOP
+                JUMP_BACKWARD           23 (to L3)
+
+ 225    L4:     END_FOR
+                POP_TOP
+
+ 235            RETURN_CONST             0 (None)
+
+ 236    L5:     LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST                0 (obj)
+                LOAD_GLOBAL              6 (dict)
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_TRUE         1 (to L6)
+
+ 237            RETURN_CONST             0 (None)
+
+ 240    L6:     LOAD_FAST                0 (obj)
+                LOAD_ATTR                9 (get + NULL|self)
+                LOAD_CONST               4 ('chat_ability')
+                CALL                     1
+                STORE_FAST               8 (ability)
+
+ 241            LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST                8 (ability)
+                LOAD_GLOBAL              6 (dict)
+                CALL                     2
+                TO_BOOL
+                EXTENDED_ARG             1
+                POP_JUMP_IF_FALSE      267 (to L20)
+
+ 242            NOP
+
+ 243    L7:     LOAD_GLOBAL             11 (int + NULL)
+                LOAD_FAST                8 (ability)
+                LOAD_ATTR                9 (get + NULL|self)
+                LOAD_CONST               5 ('ability_type')
+                CALL                     1
+                COPY                     1
+                TO_BOOL
+                POP_JUMP_IF_TRUE         6 (to L8)
+                POP_TOP
+                LOAD_GLOBAL             12 (VIDEO_ABILITY_TYPE)
+        L8:     CALL                     1
+                STORE_FAST               9 (at)
+
+ 246    L9:     LOAD_FAST                9 (at)
+                LOAD_GLOBAL             12 (VIDEO_ABILITY_TYPE)
+                LOAD_CONST               6 (16)
+                LOAD_CONST               7 (17)
+                BUILD_TUPLE              3
+                CONTAINS_OP              0
+                POP_JUMP_IF_TRUE         6 (to L10)
+                LOAD_CONST               8 ('ability_param')
+                LOAD_FAST                8 (ability)
+                CONTAINS_OP              0
+                POP_JUMP_IF_FALSE      208 (to L20)
+
+ 247   L10:     LOAD_GLOBAL             12 (VIDEO_ABILITY_TYPE)
+                LOAD_FAST                8 (ability)
+                LOAD_CONST               5 ('ability_type')
+                STORE_SUBSCR
+
+ 248            LOAD_FAST                8 (ability)
+                LOAD_ATTR                9 (get + NULL|self)
+                LOAD_CONST               8 ('ability_param')
+                CALL                     1
+                STORE_FAST              10 (param_raw)
+
+ 249            LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST               10 (param_raw)
+                LOAD_GLOBAL             16 (str)
+                CALL                     2
+                STORE_FAST              11 (as_string)
+
+ 250            BUILD_MAP                0
+                STORE_FAST              12 (base)
+
+ 251            LOAD_FAST               11 (as_string)
+                TO_BOOL
+                POP_JUMP_IF_FALSE       33 (to L15)
+
+ 252            NOP
+
+ 253   L11:     LOAD_FAST               10 (param_raw)
+                TO_BOOL
+                POP_JUMP_IF_FALSE       22 (to L12)
+                LOAD_GLOBAL             18 (json)
+                LOAD_ATTR               20 (loads)
+                PUSH_NULL
+                LOAD_FAST               10 (param_raw)
+                CALL                     1
+                JUMP_FORWARD             1 (to L13)
+       L12:     BUILD_MAP                0
+       L13:     STORE_FAST              12 (base)
+       L14:     JUMP_FORWARD            32 (to L16)
+
+ 256   L15:     LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST               10 (param_raw)
+                LOAD_GLOBAL              6 (dict)
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_FALSE       11 (to L16)
+
+ 257            LOAD_GLOBAL              7 (dict + NULL)
+                LOAD_FAST               10 (param_raw)
+                CALL                     1
+                STORE_FAST              12 (base)
+
+ 258   L16:     LOAD_GLOBAL             23 (_ability_param + NULL)
+
+ 259            LOAD_FAST                2 (duration)
+
+ 260            LOAD_FAST                3 (aspect_ratio)
+
+ 261            LOAD_FAST                4 (model)
+
+ 262            LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST               12 (base)
+                LOAD_GLOBAL              6 (dict)
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_FALSE        2 (to L17)
+                LOAD_FAST               12 (base)
+                JUMP_FORWARD             1 (to L18)
+       L17:     BUILD_MAP                0
+
+ 258   L18:     LOAD_CONST               9 (('duration', 'aspect_ratio', 'model', 'base'))
+                CALL_KW                  4
+                STORE_FAST              13 (param)
+
+ 265            LOAD_FAST               11 (as_string)
+                TO_BOOL
+                POP_JUMP_IF_TRUE         0 (to L19)
+       L19:     LOAD_GLOBAL             18 (json)
+                LOAD_ATTR               24 (dumps)
+                PUSH_NULL
+                LOAD_FAST               13 (param)
+                LOAD_CONST              10 (False)
+                LOAD_CONST              11 ((',', ':'))
+                LOAD_CONST              12 (('ensure_ascii', 'separators'))
+                CALL_KW                  3
+
+ 264            LOAD_FAST                8 (ability)
+                LOAD_CONST               8 ('ability_param')
+                STORE_SUBSCR
+
+ 268            LOAD_GLOBAL             18 (json)
+                LOAD_ATTR               24 (dumps)
+                PUSH_NULL
+                LOAD_FAST               13 (param)
+                LOAD_CONST              10 (False)
+                LOAD_CONST              11 ((',', ':'))
+                LOAD_CONST              12 (('ensure_ascii', 'separators'))
+                CALL_KW                  3
+                LOAD_FAST                8 (ability)
+                LOAD_CONST               8 ('ability_param')
+                STORE_SUBSCR
+
+ 271   L20:     LOAD_GLOBAL             26 (DURATION_KEYS)
+                GET_ITER
+       L21:     FOR_ITER                50 (to L24)
+                STORE_FAST              14 (key)
+
+ 272            LOAD_FAST_LOAD_FAST    224 (key, obj)
+                CONTAINS_OP              0
+                POP_JUMP_IF_TRUE         2 (to L22)
+                JUMP_BACKWARD           10 (to L21)
+       L22:     LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST_LOAD_FAST     14 (obj, key)
+                BINARY_SUBSCR
+                LOAD_GLOBAL             10 (int)
+                LOAD_GLOBAL             28 (float)
+                LOAD_GLOBAL             16 (str)
+                BUILD_TUPLE              3
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_TRUE         2 (to L23)
+                JUMP_BACKWARD           46 (to L21)
+
+ 273   L23:     LOAD_FAST_LOAD_FAST     32 (duration, obj)
+                LOAD_FAST               14 (key)
+                STORE_SUBSCR
+                JUMP_BACKWARD           52 (to L21)
+
+ 271   L24:     END_FOR
+                POP_TOP
+
+ 274            LOAD_GLOBAL             30 (RATIO_KEYS)
+                GET_ITER
+       L25:     FOR_ITER                39 (to L28)
+                STORE_FAST              14 (key)
+
+ 275            LOAD_FAST_LOAD_FAST    224 (key, obj)
+                CONTAINS_OP              0
+                POP_JUMP_IF_TRUE         2 (to L26)
+                JUMP_BACKWARD           10 (to L25)
+       L26:     LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST_LOAD_FAST     14 (obj, key)
+                BINARY_SUBSCR
+                LOAD_GLOBAL             16 (str)
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_TRUE         2 (to L27)
+                JUMP_BACKWARD           35 (to L25)
+
+ 276   L27:     LOAD_FAST_LOAD_FAST     48 (aspect_ratio, obj)
+                LOAD_FAST               14 (key)
+                STORE_SUBSCR
+                JUMP_BACKWARD           41 (to L25)
+
+ 274   L28:     END_FOR
+                POP_TOP
+
+ 279            LOAD_CONST              13 (('text', 'content', 'prompt', 'query', 'message', 'input'))
+                GET_ITER
+       L29:     FOR_ITER               184 (to L37)
+                STORE_FAST              14 (key)
+
+ 280            LOAD_FAST                0 (obj)
+                LOAD_ATTR                9 (get + NULL|self)
+                LOAD_FAST               14 (key)
+                CALL                     1
+                STORE_FAST              15 (val)
+
+ 281            LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST               15 (val)
+                LOAD_GLOBAL             16 (str)
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_TRUE         2 (to L30)
+                JUMP_BACKWARD           43 (to L29)
+       L30:     LOAD_FAST               15 (val)
+                LOAD_ATTR               33 (strip + NULL|self)
+                CALL                     0
+                TO_BOOL
+                POP_JUMP_IF_TRUE         2 (to L31)
+                JUMP_BACKWARD           66 (to L29)
+       L31:     LOAD_GLOBAL             35 (len + NULL)
+                LOAD_FAST               15 (val)
+                CALL                     1
+                LOAD_CONST              14 (8000)
+                COMPARE_OP              58 (bool(<=))
+                POP_JUMP_IF_TRUE         2 (to L32)
+                JUMP_BACKWARD           83 (to L29)
+       L32:     LOAD_FAST               15 (val)
+                LOAD_ATTR               37 (lstrip + NULL|self)
+                CALL                     0
+                LOAD_ATTR               39 (startswith + NULL|self)
+                LOAD_CONST              15 ('{')
+                CALL                     1
+                TO_BOOL
+                POP_JUMP_IF_FALSE        2 (to L33)
+                JUMP_BACKWARD          121 (to L29)
+
+ 283   L33:     LOAD_FAST               14 (key)
+                LOAD_CONST              16 ('content')
+                COMPARE_OP              88 (bool(==))
+                POP_JUMP_IF_FALSE       27 (to L34)
+                LOAD_FAST                0 (obj)
+                LOAD_ATTR                9 (get + NULL|self)
+                LOAD_CONST              17 ('role')
+                CALL                     1
+                LOAD_CONST              18 ((None, 'user', 'human'))
+                CONTAINS_OP              0
+                POP_JUMP_IF_FALSE        6 (to L34)
+
+ 284            LOAD_FAST_LOAD_FAST     16 (prompt, obj)
+                LOAD_FAST               14 (key)
+                STORE_SUBSCR
+                JUMP_BACKWARD          154 (to L29)
+
+ 285   L34:     LOAD_FAST               14 (key)
+                LOAD_CONST              16 ('content')
+                COMPARE_OP             119 (bool(!=))
+                POP_JUMP_IF_FALSE        6 (to L35)
+
+ 286            LOAD_FAST_LOAD_FAST     16 (prompt, obj)
+                LOAD_FAST               14 (key)
+                STORE_SUBSCR
+                JUMP_BACKWARD          166 (to L29)
+
+ 287   L35:     LOAD_CONST              19 ('local_message_id')
+                LOAD_FAST                0 (obj)
+                CONTAINS_OP              0
+                POP_JUMP_IF_TRUE         8 (to L36)
+                LOAD_CONST              20 ('content_block')
+                LOAD_FAST                0 (obj)
+                CONTAINS_OP              0
+                POP_JUMP_IF_TRUE         2 (to L36)
+                JUMP_BACKWARD          180 (to L29)
+
+ 288   L36:     LOAD_FAST_LOAD_FAST     16 (prompt, obj)
+                LOAD_FAST               14 (key)
+                STORE_SUBSCR
+                JUMP_BACKWARD          186 (to L29)
+
+ 279   L37:     END_FOR
+                POP_TOP
+
+ 291            LOAD_CONST              21 ('text_block')
+                LOAD_FAST                0 (obj)
+                CONTAINS_OP              0
+                POP_JUMP_IF_FALSE       70 (to L38)
+                LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST                0 (obj)
+                LOAD_CONST              21 ('text_block')
+                BINARY_SUBSCR
+                LOAD_GLOBAL              6 (dict)
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_FALSE       46 (to L38)
+
+ 292            LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST                0 (obj)
+                LOAD_CONST              21 ('text_block')
+                BINARY_SUBSCR
+                LOAD_ATTR                9 (get + NULL|self)
+                LOAD_CONST              22 ('text')
+                CALL                     1
+                LOAD_GLOBAL             16 (str)
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_FALSE        7 (to L38)
+
+ 293            LOAD_FAST_LOAD_FAST     16 (prompt, obj)
+                LOAD_CONST              21 ('text_block')
+                BINARY_SUBSCR
+                LOAD_CONST              22 ('text')
+                STORE_SUBSCR
+
+ 296   L38:     LOAD_CONST              23 (('local_message_id', 'localMessageId', 'client_message_id'))
+                GET_ITER
+       L39:     FOR_ITER                67 (to L42)
+                STORE_FAST              14 (key)
+
+ 297            LOAD_FAST_LOAD_FAST    224 (key, obj)
+                CONTAINS_OP              0
+                POP_JUMP_IF_TRUE         2 (to L40)
+                JUMP_BACKWARD           10 (to L39)
+       L40:     LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST_LOAD_FAST     14 (obj, key)
+                BINARY_SUBSCR
+                LOAD_GLOBAL             16 (str)
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_TRUE         2 (to L41)
+                JUMP_BACKWARD           35 (to L39)
+
+ 298   L41:     LOAD_GLOBAL             17 (str + NULL)
+                LOAD_GLOBAL             40 (uuid)
+                LOAD_ATTR               42 (uuid4)
+                PUSH_NULL
+                CALL                     0
+                CALL                     1
+                LOAD_FAST_LOAD_FAST     14 (obj, key)
+                STORE_SUBSCR
+                JUMP_BACKWARD           69 (to L39)
+
+ 296   L42:     END_FOR
+                POP_TOP
+
+ 301            LOAD_FAST                5 (attachments)
+                TO_BOOL
+                POP_JUMP_IF_FALSE       37 (to L43)
+                LOAD_CONST              24 ('attachment_block')
+                LOAD_FAST                0 (obj)
+                CONTAINS_OP              0
+                POP_JUMP_IF_FALSE       31 (to L43)
+                LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST                0 (obj)
+                LOAD_CONST              24 ('attachment_block')
+                BINARY_SUBSCR
+                LOAD_GLOBAL              6 (dict)
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_FALSE        7 (to L43)
+
+ 302            LOAD_FAST_LOAD_FAST     80 (attachments, obj)
+                LOAD_CONST              24 ('attachment_block')
+                BINARY_SUBSCR
+                LOAD_CONST              25 ('attachments')
+                STORE_SUBSCR
+
+ 303   L43:     LOAD_FAST                5 (attachments)
+                TO_BOOL
+                POP_JUMP_IF_FALSE       74 (to L45)
+                LOAD_FAST                0 (obj)
+                LOAD_ATTR                9 (get + NULL|self)
+                LOAD_CONST              25 ('attachments')
+                CALL                     1
+                POP_JUMP_IF_NONE        56 (to L45)
+                LOAD_GLOBAL              1 (isinstance + NULL)
+                LOAD_FAST                0 (obj)
+                LOAD_ATTR                9 (get + NULL|self)
+                LOAD_CONST              25 ('attachments')
+                CALL                     1
+                LOAD_GLOBAL              2 (list)
+                CALL                     2
+                TO_BOOL
+                POP_JUMP_IF_FALSE       20 (to L45)
+
+ 305            LOAD_FAST                0 (obj)
+                LOAD_CONST              25 ('attachments')
+                BINARY_SUBSCR
+                TO_BOOL
+                POP_JUMP_IF_FALSE        6 (to L44)
+                LOAD_FAST                6 (depth)
+                LOAD_CONST              26 (4)
+                COMPARE_OP              58 (bool(<=))
+                POP_JUMP_IF_FALSE        4 (to L45)
+
+ 306   L44:     LOAD_FAST_LOAD_FAST     80 (attachments, obj)
+                LOAD_CONST              25 ('attachments')
+                STORE_SUBSCR
+
+ 308   L45:     LOAD_FAST                0 (obj)
+                LOAD_ATTR               45 (values + NULL|self)
+                CALL                     0
+                GET_ITER
+       L46:     FOR_ITER                21 (to L47)
+                STORE_FAST              16 (value)
+
+ 309            LOAD_GLOBAL              5 (_patch_tree + NULL)
+
+ 310            LOAD_FAST               16 (value)
+
+ 311            LOAD_FAST                1 (prompt)
+
+ 312            LOAD_FAST                2 (duration)
+
+ 313            LOAD_FAST                3 (aspect_ratio)
+
+ 314            LOAD_FAST                4 (model)
+
+ 315            LOAD_FAST                5 (attachments)
+
+ 316            LOAD_FAST                6 (depth)
+                LOAD_CONST               2 (1)
+                BINARY_OP                0 (+)
+
+ 309            LOAD_CONST               3 (('prompt', 'duration', 'aspect_ratio', 'model', 'attachments', 'depth'))
+                CALL_KW                  7
+                POP_TOP
+                JUMP_BACKWARD           23 (to L46)
+
+ 308   L47:     END_FOR
+                POP_TOP
+                RETURN_CONST             0 (None)
+
+  --   L48:     PUSH_EXC_INFO
+
+ 244            LOAD_GLOBAL             14 (Exception)
+                CHECK_EXC_MATCH
+                POP_JUMP_IF_FALSE       10 (to L50)
+                POP_TOP
+
+ 245            LOAD_GLOBAL             12 (VIDEO_ABILITY_TYPE)
+                STORE_FAST               9 (at)
+       L49:     POP_EXCEPT
+                EXTENDED_ARG             3
+                JUMP_BACKWARD_NO_INTERRUPT 861 (to L9)
+
+ 244   L50:     RERAISE                  0
+
+  --   L51:     COPY                     3
+                POP_EXCEPT
+                RERAISE                  1
+       L52:     PUSH_EXC_INFO
+
+ 254            LOAD_GLOBAL             14 (Exception)
+                CHECK_EXC_MATCH
+                POP_JUMP_IF_FALSE        6 (to L54)
+                POP_TOP
+
+ 255            BUILD_MAP                0
+                STORE_FAST              12 (base)
+       L53:     POP_EXCEPT
+                EXTENDED_ARG             2
+                JUMP_BACKWARD_NO_INTERRUPT 745 (to L16)
+
+ 254   L54:     RERAISE                  0
+
+  --   L55:     COPY                     3
+                POP_EXCEPT
+                RERAISE                  1
+ExceptionTable:
+  L7 to L9 -> L48 [0]
+  L11 to L14 -> L52 [0]
+  L48 to L49 -> L51 [1] lasti
+  L50 to L51 -> L51 [1] lasti
+  L52 to L53 -> L55 [1] lasti
+  L54 to L55 -> L55 [1] lasti

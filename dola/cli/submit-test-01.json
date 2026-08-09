@@ -1,0 +1,39 @@
+{
+  "jobId": "37432aac3d994cf18ae3ceb1bc6dd45e",
+  "requestId": "jiejin-v2-shot01-002",
+  "state": "queued",
+  "accountId": "",
+  "duration": 5,
+  "creditCost": 1,
+  "prompt": "Slow camera pan right across a simple stock price line chart on a floating white card, the line trending gently downward toward a large padlock icon at the far right marking a future date, subtle data points pulsing, flat 3D clay render, soft studio light, no text, no letters",
+  "aspectRatio": "16:9",
+  "model": "",
+  "createdAt": "2026-08-04T12:41:24.041+00:00",
+  "submittedAt": null,
+  "completedAt": null,
+  "messageId": "",
+  "vid": "",
+  "sessionUrl": "",
+  "outputFile": "",
+  "manifestFile": "",
+  "sha256": "",
+  "size": 0,
+  "error": "",
+  "attempt": 0,
+  "outputDir": "E:\\projectHome\\media-cli\\dola\\cli\\downloads\\jobs\\2026-08-04\\37432aac3d994cf18ae3ceb1bc6dd45e",
+  "created": true,
+  "worker": {
+    "started": false,
+    "workers": [
+      {
+        "workerId": "38604-937c83f6",
+        "pid": 38604,
+        "concurrency": 3,
+        "startedAt": "2026-08-04T09:13:52.697+00:00",
+        "heartbeatAt": "2026-08-04T12:41:23.852+00:00",
+        "alive": true,
+        "stopRequested": false
+      }
+    ]
+  }
+}

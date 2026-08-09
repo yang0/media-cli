@@ -1,58 +1,23 @@
-# Dependencies
+# 依赖目录（不提交）
 node_modules/
-.venv/
-venv/
-__pycache__/
-*.pyc
-.Python
+**/node_modules/
+bun.lock
+package-lock.json
 
-# Build
-dist/
-build/
-*.tgz
-*.egg-info/
-
-# Runtime / generated
-downloads/
-**/downloads/
-higgsfield-downloads/
-**/higgsfield-downloads/
-outputs/
-**/outputs/
-debug/
-**/debug/
-profiles/
-**/profiles/
+# 日志与临时
 logs/
 *.log
+_temp/
+_tmp*/
 
-# Session / local state (do not commit)
+# 下载产物与会话
+**/downloads/
+**/downloads*/
+.dola-cli-session.json
+**/.dola-cli-session.json
 *.session.json
-.dola-cli-session*.json
-.doubao-img*.json
-.higgsfield-state.json
-account-pool*.json
-bridge_*.json
-flow_*.json
-
-# Secrets & browser data
-*cookies*.txt
-*_cookies.txt
-.env
-.env.*
-!.env.example
-browser_data/
-**/browser_data/
-
-# OS / editor
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.swp
 .obsidian/
 
-# Test / temp
-tmp/
-.temp/
-*.bak
+# dola 临时探测/工作文件（含密钥风险）
+dola/webview/_*/
+**/_upload_probe/

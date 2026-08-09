@@ -1,0 +1,189 @@
+# cli.cpython-313.pyc filename=webview\free_protocol\cli.py
+# co_names=('__doc__', '__future__', 'annotations', 'argparse', 'json', 'os', 'sys', 'pathlib', 'Path', '__file__', 'resolve', 'parents', 'WEBVIEW_ROOT', 'str', 'path', 'insert', 'typing', 'Any', 'free_protocol.account_import', 'capture_protocol', 'import_account_interactive', 'import_from_accounts_file', 'free_protocol.registry', 'AccountRegistry', 'free_protocol.video_api', 'generate_video_api', '_print', 'main', '__name__', 'SystemExit')
+
+STR 'CLI for dola-free style account import + external HTTP video submit.\n\nCRITICAL:\n  Do NOT submit video/chat inside the Dola WebView window.\n  Login in WebView only; submit via `video generate` / `video submit15`.\n\nExamples:\n  python -m free_protocol.cli account list\n  python -m free_protocol.cli account import --account DemoUser\n  python -m free_protocol.cli video submit15 --account DemoUser --prompt "少林武僧在练习武功" --out ..\\cli\\downloads\\api_video\n  python -m free_protocol.cli video generate --account DemoUser --duration 15 --prompt "..." --out ..\\cli\\downloads\\api_video\n'
+<module>.NAME isinstance
+<module>.NAME dict
+<module>.NAME list
+<module>.NAME print
+<module>.NAME json
+<module>.NAME dumps
+<module>.VAR obj
+STR 'Dola free-style account import + HTTP video'
+STR '--data-dir'
+STR ''
+STR 'Registry root (default %%LOCALAPPDATA%%/dola-cli)'
+STR '--profiles'
+STR 'WebView profiles directory'
+STR '--account-pool'
+STR 'Netscape cookie pool directory'
+STR 'resource'
+STR 'account'
+STR 'action'
+STR 'list'
+STR 'import'
+STR 'Open WebView, login, export cookies + client profile'
+STR '--account'
+STR '-a'
+STR '--accounts'
+STR 'google_mail.txt for auto-login by --index'
+STR '--index'
+STR '--email'
+STR '--password'
+STR '--auto-login'
+STR 'store_true'
+STR '--manual-clicks'
+STR 'Fill Google email/password only; leave every button click to the user'
+STR '--timeout'
+STR '--url'
+STR 'https://www.dola.com/chat'
+STR 'capture'
+STR 'Refresh session/fingerprint only (does NOT submit in Dola window)'
+STR '--auto-video'
+STR 'IGNORED/disabled — in-window submit causes captcha/logout'
+STR '--prompt'
+STR 'show'
+STR 'video'
+STR 'generate'
+STR 'External HTTP video submit (never uses Dola window composer)'
+STR '--duration'
+STR '--aspect-ratio'
+STR '9:16'
+STR '--model'
+STR '--file'
+STR 'append'
+STR 'files'
+STR '--out'
+STR 'cli'
+STR 'downloads'
+STR 'api_video'
+STR '--no-wait'
+STR 'Submit only; download later'
+STR 'submit15'
+STR 'Alias: external 15s Seedance submit (free-tool style)'
+STR 'seedance_v2.0'
+STR 'data_dir'
+STR 'profiles_dir'
+STR 'cookie_pool'
+STR 'protocol'
+STR '1'
+STR 'DOLA_MANUAL_CLICKS'
+STR '--account is required unless --accounts is set'
+STR 'no_wait'
+STR 'file'
+STR 'accepted'
+STR 'status'
+STR 'unknown command '
+STR ' '
+<module>.NAME argparse
+<module>.NAME ArgumentParser
+<module>.NAME add_argument
+<module>.NAME add_subparsers
+<module>.NAME add_parser
+<module>.NAME int
+<module>.NAME float
+<module>.NAME str
+<module>.NAME WEBVIEW_ROOT
+<module>.NAME parent
+<module>.NAME parse_args
+<module>.NAME data_dir
+<module>.NAME profiles
+<module>.NAME account_pool
+<module>.NAME AccountRegistry
+<module>.NAME resource
+<module>.NAME action
+<module>.NAME list_accounts
+<module>.NAME to_public
+<module>.NAME _print
+<module>.NAME len
+<module>.NAME load
+<module>.NAME account
+<module>.NAME protocol
+<module>.NAME ready_for_video
+<module>.NAME completionUrl
+<module>.NAME hasVideoAbility
+<module>.NAME hasDurationField
+<module>.NAME sampleDuration
+<module>.NAME sampleAspectRatio
+<module>.NAME capturedAt
+<module>.NAME completionTemplateJson
+<module>.NAME manual_clicks
+<module>.NAME os
+<module>.NAME environ
+<module>.NAME accounts
+<module>.NAME import_from_accounts_file
+<module>.NAME index
+<module>.NAME timeout
+<module>.NAME url
+<module>.NAME SystemExit
+<module>.NAME import_account_interactive
+<module>.NAME email
+<module>.NAME password
+<module>.NAME bool
+<module>.NAME auto_login
+<module>.NAME hasSession
+<module>.NAME capture_protocol
+<module>.NAME auto_video
+<module>.NAME prompt
+<module>.NAME duration
+<module>.NAME model
+<module>.NAME generate_video_api
+<module>.NAME aspect_ratio
+<module>.NAME files
+<module>.NAME out
+<module>.NAME getattr
+<module>.NAME get
+<module>.VAR argv
+<module>.VAR p
+<module>.VAR sub
+<module>.VAR account
+<module>.VAR ac
+<module>.VAR imp
+<module>.VAR cap
+<module>.VAR show
+<module>.VAR video
+<module>.VAR vc
+<module>.VAR gen
+<module>.VAR s15
+<module>.VAR args
+<module>.VAR reg_kwargs
+<module>.VAR registry
+<module>.VAR r
+<module>.VAR rows
+<module>.VAR rec
+<module>.VAR pub
+<module>.VAR account_id
+<module>.VAR duration
+<module>.VAR model
+<module>.VAR result
+STR '__main__'
+NAME __doc__
+NAME __future__
+NAME annotations
+NAME argparse
+NAME json
+NAME os
+NAME sys
+NAME pathlib
+NAME Path
+NAME __file__
+NAME resolve
+NAME parents
+NAME WEBVIEW_ROOT
+NAME str
+NAME path
+NAME insert
+NAME typing
+NAME Any
+NAME free_protocol.account_import
+NAME capture_protocol
+NAME import_account_interactive
+NAME import_from_accounts_file
+NAME free_protocol.registry
+NAME AccountRegistry
+NAME free_protocol.video_api
+NAME generate_video_api
+NAME _print
+NAME main
+NAME __name__
+NAME SystemExit
