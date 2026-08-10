@@ -1,6 +1,6 @@
 // grok 搜索客户端：CDP 驱动 x.com/i/grok（复用 9221 Chrome 登录态）
-// playwright-core 复用 doubao-img 的 node_modules（Windows 绝对路径 import）
-import pkg from 'file:///E:/projectHome/doubao-img/node_modules/playwright-core/index.js';
+// playwright-core 本地依赖：cli/node_modules/playwright-core（相对路径，src/lib/ 向上两级到 cli 根）
+import pkg from '../../node_modules/playwright-core/index.js';
 const { chromium } = pkg;
 
 const DEFAULT_CDP = 'http://127.0.0.1:9221';
