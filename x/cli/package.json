@@ -1,0 +1,14 @@
+{
+  "name": "media-cli-x",
+  "version": "1.0.0",
+  "description": "X (Twitter) CLI for tweet drafting, reply queue management, and automated publishing via CDP.",
+  "type": "module",
+  "main": "src/x-cli.mjs",
+  "bin": {
+    "x-cli": "src/x-cli.mjs"
+  },
+  "scripts": {
+    "start": "node src/x-cli.mjs"
+  },
+  "dependencies": {}
+}
