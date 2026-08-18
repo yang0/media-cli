@@ -1,0 +1,4 @@
+requests>=2.31
+Pillow>=10.0
+websockets>=11.0
+Scrapy>=2.11

@@ -15,6 +15,7 @@ Authentication is supplied by the user through a logged-in Chrome CDP session, a
 | Doubao | Yes | No | No | `doubao/cli` |
 | Google Flow | Yes | No | No | `flow/cli` |
 | Volc-TTS | No | No | **Yes** | `volc-tts/cli` |
+| Weibo | Search / Screenshot | No | No | `weibo/cli` |
 
 ## Quick start
 
@@ -32,6 +33,17 @@ chrome.exe --remote-debugging-port=9221 --user-data-dir="$PWD\.chrome-profile"
 ```
 
 See the README in each platform directory for its port, authentication method, and commands.
+
+微博 CLI：
+
+```powershell
+cd weibo\cli
+python -m pip install -e .
+weibo-cli search "人工智能 机器人"
+weibo-cli capture "https://weibo.com/<uid>/<bid>"
+```
+
+搜索与截图是独立命令；长微博截图会按 9:16 比例自动分图。详见 [`weibo/cli/README.md`](weibo/cli/README.md)。
 
 ## Repository rules
 
