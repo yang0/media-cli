@@ -4,6 +4,7 @@ node_modules/
 __pycache__/
 **/__pycache__/
 *.pyc
+*.egg-info/
 bun.lock
 package-lock.json
 

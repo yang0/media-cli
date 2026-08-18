@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zhihu-plus-cli"
+version = "0.1.0"
+description = "Zhihu answer and column article evidence screenshot CLI"
+requires-python = ">=3.11"
+dependencies = [
+  "Pillow>=10.0",
+  "websockets>=11.0",
+]
+
+[project.scripts]
+zhihu-plus = "zhihu_cli.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["zhihu_cli*"]

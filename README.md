@@ -16,6 +16,7 @@ Authentication is supplied by the user through a logged-in Chrome CDP session, a
 | Google Flow | Yes | No | No | `flow/cli` |
 | Volc-TTS | No | No | **Yes** | `volc-tts/cli` |
 | Weibo | Search / Screenshot | No | No | `weibo/cli` |
+| Zhihu | Answer / Article Screenshot | No | No | `zhihu/cli` |
 
 ## Quick start
 
@@ -44,6 +45,18 @@ weibo-cli capture "https://weibo.com/<uid>/<bid>"
 ```
 
 搜索与截图是独立命令；长微博截图会按 9:16 比例自动分图。详见 [`weibo/cli/README.md`](weibo/cli/README.md)。
+
+知乎回答与专栏文章截图 CLI：
+
+```powershell
+cd zhihu\cli
+python -m pip install -e .
+zhihu-plus auth check --cdp-port 9221
+zhihu-plus capture "https://www.zhihu.com/question/<qid>/answer/<aid>"
+zhihu-plus capture "https://zhuanlan.zhihu.com/p/<id>"
+```
+
+回答截图会隔离问题标题和指定回答，文章截图只截取文章主体；长内容按不超过 9:16 的语义边界自动分图。详见 [`zhihu/cli/README.md`](zhihu/cli/README.md)。
 
 ## Repository rules
 
