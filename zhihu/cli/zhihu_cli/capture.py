@@ -97,6 +97,148 @@ _PREPARE_SCRIPT = r"""
     return {cardNotFound: true, body: body.slice(0, 1200), reason: 'unsupported-type'};
   }
   await pause(700);
+
+  // Zhihu keeps rich-content images lazy even after the answer/article has
+  // been expanded.  A clone of the card does not inherit the browser's
+  // decoded-image state, so copying it before materialising these images
+  // leaves the reserved aspect-ratio boxes blank in later screenshot parts.
+  const isPlaceholderSource = raw => {
+    const value = String(raw || '').trim();
+    if (!value) return true;
+    const lower = value.toLowerCase();
+    if (lower === 'about:blank' || lower === 'none' || lower.startsWith('data:')) return true;
+    return /(?:^|[\/_.-])(placeholder|placehold|spacer|transparent|blank|loading|pixel|1x1)(?:[\/_.?&-]|$)/i.test(lower);
+  };
+  const toImageUrl = raw => {
+    const value = String(raw || '').trim();
+    if (isPlaceholderSource(value)) return '';
+    try {
+      const url = new URL(value, location.href);
+      if (!['http:', 'https:'].includes(url.protocol)) return '';
+      return url.href;
+    } catch (_) {
+      return '';
+    }
+  };
+  const imageSources = image => {
+    const values = [];
+    const add = value => {
+      const url = toImageUrl(value);
+      if (url && !values.includes(url)) values.push(url);
+    };
+    add(image.currentSrc);
+    add(image.getAttribute('src'));
+    for (const name of [
+      'data-original', 'data-actualsrc', 'data-src', 'data-lazy-src',
+      'data-original-src', 'data-image-url', 'data-url'
+    ]) add(image.getAttribute(name));
+    for (const raw of [image.getAttribute('srcset'), image.getAttribute('data-srcset')]) {
+      for (const entry of String(raw || '').split(',')) {
+        add(entry.trim().split(/\s+/)[0]);
+      }
+    }
+    return values;
+  };
+  const imageHasPixels = image => (
+    image.complete && image.naturalWidth > 2 && image.naturalHeight > 2
+  );
+  const imageIsLoaded = (image, source) => (
+    imageHasPixels(image) && toImageUrl(image.currentSrc || image.getAttribute('src')) === source
+  );
+  const waitForImage = (image, source) => new Promise(resolve => {
+    let settled = false;
+    const onLoad = () => finish(imageIsLoaded(image, source));
+    const onError = () => finish(false);
+    const finish = ok => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      image.removeEventListener('load', onLoad);
+      image.removeEventListener('error', onError);
+      resolve(Boolean(ok));
+    };
+    const timer = setTimeout(() => finish(imageIsLoaded(image, source)), 3500);
+    image.addEventListener('load', onLoad);
+    image.addEventListener('error', onError);
+    image.loading = 'eager';
+    image.removeAttribute('srcset');
+    image.removeAttribute('data-srcset');
+    image.setAttribute('src', source);
+    pause(0).then(() => {
+      if (imageIsLoaded(image, source)) finish(true);
+    });
+  });
+  const materializeImage = async image => {
+    const candidates = imageSources(image);
+    for (const source of candidates) {
+      if (imageIsLoaded(image, source)) {
+        image.__zhihuPlusImageLoaded = true;
+        image.__zhihuPlusImageSource = source;
+        return true;
+      }
+      if (await waitForImage(image, source)) {
+        image.__zhihuPlusImageLoaded = true;
+        image.__zhihuPlusImageSource = source;
+        return true;
+      }
+    }
+    image.__zhihuPlusImageLoaded = false;
+    image.__zhihuPlusImageSource = '';
+    return false;
+  };
+  const clearImageSizing = node => {
+    for (const property of ['height', 'min-height', 'max-height', 'aspect-ratio', 'background-image']) {
+      node.style.removeProperty(property);
+    }
+  };
+  const removeFailedImage = (image, root) => {
+    image.removeAttribute('src');
+    image.removeAttribute('srcset');
+    let node = image;
+    while (node && node !== root) {
+      clearImageSizing(node);
+      const parent = node.parentElement;
+      const isPortal = node.matches('figure, [data-portal], [class*="portal" i]');
+      const isImageOnlyContainer = node !== image && node.children.length <= 1 && !text(node);
+      if ((isPortal || isImageOnlyContainer) && !text(node)) {
+        node.remove();
+        return;
+      }
+      node = parent;
+    }
+    image.remove();
+  };
+  const transferImageState = (original, clone, root) => {
+    const originals = Array.from(original.querySelectorAll('img'));
+    const clones = Array.from(clone.querySelectorAll('img'));
+    clones.forEach((image, index) => {
+      const source = originals[index];
+      const actual = source && source.__zhihuPlusImageSource;
+      if (!source || !source.__zhihuPlusImageLoaded || !actual) {
+        removeFailedImage(image, root);
+        return;
+      }
+      image.loading = 'eager';
+      image.removeAttribute('srcset');
+      image.removeAttribute('data-srcset');
+      for (const name of [
+        'data-original', 'data-actualsrc', 'data-src', 'data-lazy-src',
+        'data-original-src', 'data-image-url', 'data-url'
+      ]) image.removeAttribute(name);
+      image.classList.remove('lazy', 'lazy-image', 'is-lazy');
+      image.setAttribute('src', actual);
+    });
+  };
+  const sourceImages = Array.from(source.querySelectorAll('img'));
+  const originalScrollY = window.scrollY || window.pageYOffset || 0;
+  for (const image of sourceImages) {
+    image.loading = 'eager';
+    try { image.scrollIntoView({block: 'center', inline: 'nearest'}); } catch (_) {}
+    await pause(60);
+  }
+  await Promise.all(sourceImages.map(materializeImage));
+  try { window.scrollTo(0, originalScrollY); } catch (_) {}
+
   const wrapper = document.createElement('div');
   wrapper.id = 'zhihu-plus-capture-root';
   wrapper.style.cssText = [
@@ -110,19 +252,27 @@ _PREPARE_SCRIPT = r"""
     const answerClone = source.cloneNode(true);
     hide(titleClone);
     hide(answerClone);
+    transferImageState(title, titleClone, wrapper);
+    transferImageState(source, answerClone, wrapper);
     wrapper.append(titleClone, answerClone);
   } else {
     const articleClone = source.cloneNode(true);
     hide(articleClone);
+    transferImageState(source, articleClone, wrapper);
     wrapper.append(articleClone);
   }
   document.body.append(wrapper);
   await pause(250);
-  const images = Array.from(wrapper.querySelectorAll('img'));
+  let images = Array.from(wrapper.querySelectorAll('img'));
   for (let attempt = 0; attempt < 24; attempt++) {
-    if (images.every(image => image.complete && image.naturalWidth > 0)) break;
+    if (images.every(imageHasPixels)) break;
     await pause(250);
   }
+  const beforePruneImageCount = images.length;
+  for (const image of images) {
+    if (!imageHasPixels(image)) removeFailedImage(image, wrapper);
+  }
+  images = Array.from(wrapper.querySelectorAll('img'));
   const rootRect = wrapper.getBoundingClientRect();
   const pageY = window.scrollY || window.pageYOffset || 0;
   const clip = {
@@ -163,6 +313,7 @@ _PREPARE_SCRIPT = r"""
     captureMode: targetType === 'answer' ? 'answer-question-title-and-answer' : 'article-post-main',
     documentHeight: Math.ceil(clip.height),
     imageCount: images.length,
+    removedImageCount: Math.max(0, beforePruneImageCount - images.length),
     candidateCount: answerCandidates.length
   };
 })()
@@ -328,6 +479,8 @@ async def capture_zhihu_page(
         "dom_height_css": height,
         "boundaries": list(value.get("boundaries") or []),
         "bands": band_records,
+        "image_count": int(value.get("imageCount") or 0),
+        "removed_image_count": int(value.get("removedImageCount") or 0),
         "viewport": {"width": viewport_width, "height": viewport_height},
         "body_excerpt": str(value.get("body") or ""),
     }
@@ -411,6 +564,8 @@ async def capture_async(
                 "clip": metadata["clip"],
                 "dom_height_css": metadata["dom_height_css"],
                 "bands": metadata["bands"],
+                "image_count": metadata["image_count"],
+                "removed_image_count": metadata["removed_image_count"],
                 "viewport": metadata["viewport"],
                 "part_count": len(pieces),
                 "parts": pieces,

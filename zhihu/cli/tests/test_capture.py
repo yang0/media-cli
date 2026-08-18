@@ -106,6 +106,28 @@ class CaptureTests(unittest.TestCase):
         self.assertIn("source.cloneNode(true)", _PREPARE_SCRIPT)
         self.assertNotIn("Page.captureScreenshot", _PREPARE_SCRIPT)
 
+    def test_dom_script_promotes_lazy_image_sources_before_clone(self):
+        self.assertIn("image.currentSrc", _PREPARE_SCRIPT)
+        self.assertIn("'data-original'", _PREPARE_SCRIPT)
+        self.assertIn("'data-actualsrc'", _PREPARE_SCRIPT)
+        self.assertIn("image.scrollIntoView", _PREPARE_SCRIPT)
+        self.assertIn("image.loading = 'eager'", _PREPARE_SCRIPT)
+        self.assertIn("__zhihuPlusImageSource", _PREPARE_SCRIPT)
+        self.assertIn("transferImageState(source, answerClone, wrapper)", _PREPARE_SCRIPT)
+
+    def test_dom_script_rejects_placeholders_and_collapses_failed_image_boxes(self):
+        self.assertIn("isPlaceholderSource", _PREPARE_SCRIPT)
+        self.assertIn("naturalWidth > 2 && image.naturalHeight > 2", _PREPARE_SCRIPT)
+        self.assertIn("removeFailedImage", _PREPARE_SCRIPT)
+        self.assertIn("figure, [data-portal], [class*=\"portal\" i]", _PREPARE_SCRIPT)
+        self.assertIn("'min-height'", _PREPARE_SCRIPT)
+        self.assertIn("beforePruneImageCount", _PREPARE_SCRIPT)
+
+    def test_dom_script_keeps_loaded_images_using_actual_url(self):
+        self.assertIn("image.setAttribute('src', actual)", _PREPARE_SCRIPT)
+        self.assertIn("'data-original', 'data-actualsrc'", _PREPARE_SCRIPT)
+        self.assertIn("image.classList.remove('lazy', 'lazy-image', 'is-lazy')", _PREPARE_SCRIPT)
+
     def test_page_capture_injects_cookie_and_splits_dom_bands(self):
         reference = parse_reference("https://www.zhihu.com/question/1/answer/2")
         session = FakeSession("fake")
@@ -150,6 +172,8 @@ class CaptureTests(unittest.TestCase):
             self.assertTrue(all(Path(output, part["path"]).exists() for part in item["parts"]))
             self.assertTrue(all(part["height"] <= part["width"] * 16 / 9 for part in item["parts"]))
             self.assertIn("bands", item)
+            self.assertEqual(item["image_count"], 0)
+            self.assertEqual(item["removed_image_count"], 0)
             self.assertTrue(all(part["filename"].startswith("zhihu-answer-9-") for part in item["parts"]))
 
     def test_batch_partial_failure_is_preserved_in_manifest(self):

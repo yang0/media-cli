@@ -36,6 +36,8 @@ zhihu-plus capture "https://zhuanlan.zhihu.com/p/<article-id>" --chrome "C:\path
 
 长 DOM 会先按不超过 12,000 CSS 像素的带宽截取并拼接，再按语义边界切成宽:高不超过 9:16 的 PNG。找不到安全边界时最多硬切并保留默认 64 像素重叠，最后一张保持实际高度。
 
+截图前会滚动触发正文图片加载，并从 `currentSrc`、`data-original`、`data-actualsrc` 等属性提取真实地址；无法加载的懒加载占位图会被清除或收缩对应图片容器，避免长截图中出现大块空白。
+
 输出目录：
 
 ```text
