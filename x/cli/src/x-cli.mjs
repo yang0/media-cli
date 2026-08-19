@@ -4,6 +4,7 @@ import { handleDraftList } from "./commands/draft-list.mjs";
 import { handleDraftApprove, handleDraftDelete, handleDraftClear } from "./commands/draft-manage.mjs";
 import { handleDraftSend } from "./commands/draft-send.mjs";
 import { handleDraftPushOnline } from "./commands/draft-push-online.mjs";
+import { handleCapture } from "./commands/capture.mjs";
 
 function printHelp() {
   console.log(`
@@ -22,6 +23,10 @@ x-cli — X (Twitter) 互动与草稿箱管理工具
   draft delete <id>                            # 删除单条草稿
   draft clear                                  # 清空草稿箱
   draft send <id|all> [--port 9221]            # 直接通过 Chrome CDP 发送发布回复
+
+推文截图:
+  capture <推文链接或数字ID> [--port 9221] [--width 598] [--wait 5]
+          [--cut-stats] [--output-dir <目录>]
 
 示例:
   node src/x-cli.mjs draft push-online all     # 一键将所有待发回复推送到 X 网页官方草稿箱
@@ -63,6 +68,8 @@ async function main() {
         printHelp();
         process.exit(1);
     }
+  } else if (cmd === "capture") {
+    return await handleCapture([subcmd, ...rest].filter((value) => value !== undefined));
   } else {
     console.error(`❌ 未知命令: ${cmd}`);
     printHelp();

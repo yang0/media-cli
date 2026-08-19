@@ -17,6 +17,7 @@ Authentication is supplied by the user through a logged-in Chrome CDP session, a
 | Volc-TTS | No | No | **Yes** | `volc-tts/cli` |
 | Weibo | Search / Screenshot | No | No | `weibo/cli` |
 | Zhihu | Answer / Article Screenshot | No | No | `zhihu/cli` |
+| X | Draft / Reply / Tweet Screenshot | No | No | `x/cli` |
 
 ## Quick start
 
@@ -57,6 +58,15 @@ zhihu-plus capture "https://zhuanlan.zhihu.com/p/<id>"
 ```
 
 回答截图会隔离问题标题和指定回答，文章截图只截取文章主体；长内容按不超过 9:16 的语义边界自动分图。详见 [`zhihu/cli/README.md`](zhihu/cli/README.md)。
+
+X 推文和回复截图 CLI：
+
+```powershell
+cd x\cli
+node src/x-cli.mjs capture "https://x.com/<handle>/status/<tweet-id>"
+```
+
+截图会精确隔离目标推文 `article`，不会截取整页时间线；详见 [`x/README.md`](x/README.md)。
 
 ## Repository rules
 
