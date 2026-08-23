@@ -1,6 +1,6 @@
 # media-cli / x
 
-X (Twitter) CLI for tweet drafting, reply queue management, automated publishing, and single-tweet screenshots via CDP.
+X (Twitter) CLI for tweet drafting, reply queue management, automated publishing, single-tweet screenshots via CDP, and a thin alias that forwards Markdown longform to video-uploader/x.
 
 ## 功能特性
 
@@ -17,6 +17,9 @@ X (Twitter) CLI for tweet drafting, reply queue management, automated publishing
    - 精确按 status ID 截取单条 `article`，不会把时间线或其他回复截进图片。
    - 支持原推和回复、媒体与引用/转推卡片；默认保留互动统计，可用 `--cut-stats` 隐藏。
    - 复用已登录 Chrome CDP 9221，不安装 Puppeteer；默认宽度 598px。
+5. **X Articles 长文草稿**：
+   - `article save FILE.md --yes --json` 转调 `video-uploader/x` 的独立 article 模块，写入 X 文章草稿箱。
+   - `draft *` 仍然只管理回复草稿。
 
 ## 常用命令
 
@@ -37,6 +40,9 @@ node src/x-cli.mjs draft send <id>
 
 # 查看已发送历史记录
 node src/x-cli.mjs draft list --history
+
+# 把 Markdown 长文存进 X Articles 草稿箱（转调 video-uploader/x）
+node src/x-cli.mjs article save "G:/x-expert/inbox/articles/example.md" --yes --json
 
 # 截取原推或回复（纯数字 ID 也可）
 node src/x-cli.mjs capture "https://x.com/<handle>/status/<tweet-id>"

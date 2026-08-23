@@ -5,6 +5,7 @@ import { handleDraftApprove, handleDraftDelete, handleDraftClear } from "./comma
 import { handleDraftSend } from "./commands/draft-send.mjs";
 import { handleDraftPushOnline } from "./commands/draft-push-online.mjs";
 import { handleCapture } from "./commands/capture.mjs";
+import { handleArticle } from "./commands/article.mjs";
 
 function printHelp() {
   console.log(`
@@ -24,19 +25,24 @@ x-cli — X (Twitter) 互动与草稿箱管理工具
   draft clear                                  # 清空草稿箱
   draft send <id|all> [--port 9221]            # 直接通过 Chrome CDP 发送发布回复
 
+X Articles 长文草稿（转调 video-uploader/x，不是回复草稿）:
+  article save FILE.md --yes --json
+  article FILE.md --save-draft --yes --json
+
 推文截图:
   capture <推文链接或数字ID> [--port 9221] [--width 598] [--wait 5]
           [--cut-stats] [--output-dir <目录>]
 
 示例:
   node src/x-cli.mjs draft push-online all     # 一键将所有待发回复推送到 X 网页官方草稿箱
+  node src/x-cli.mjs article save inbox/articles/foo.md --yes --json
   node src/x-cli.mjs draft list
 `);
 }
 
 async function main() {
   const args = process.argv.slice(2);
-  if (!args.length || args.includes("--help") || args.includes("-h")) {
+  if (!args.length || args[0] === "--help" || args[0] === "-h") {
     printHelp();
     return;
   }
@@ -68,6 +74,8 @@ async function main() {
         printHelp();
         process.exit(1);
     }
+  } else if (cmd === "article") {
+    return await handleArticle([subcmd, ...rest].filter((value) => value !== undefined));
   } else if (cmd === "capture") {
     return await handleCapture([subcmd, ...rest].filter((value) => value !== undefined));
   } else {
